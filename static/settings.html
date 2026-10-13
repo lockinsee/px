@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="referrer" content="no-referrer" />
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700;800&display=swap" />
+  <link rel="stylesheet" href="/assets/css/app.css" />
+  <script src="/app-config.js"></script>
+  <script src="/assets/js/storage.js"></script>
+  <script src="/assets/js/app.js"></script>
+  <title>Settings</title>
+</head>
+<body data-title="Settings">
+  <div class="orbs" aria-hidden="true"><i></i><i></i><i></i></div>
+  <header class="topbar">
+    <a class="brand" href="/"><span data-app-name></span><i>.</i></a>
+  </header>
+  <main class="page">
+    <h1>Settings</h1>
+
+    <section class="card">
+      <div class="row">
+        <label for="engine">Search engine</label>
+        <select id="engine" data-setting="engine">
+          <option value="https://duckduckgo.com/?q=">DuckDuckGo</option>
+          <option value="https://search.brave.com/search?q=">Brave Search</option>
+          <option value="https://www.google.com/search?q=">Google</option>
+          <option value="https://www.bing.com/search?q=">Bing</option>
+          <option value="https://www.startpage.com/do/search?q=">Startpage</option>
+        </select>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="row">
+        <label for="proxy">Proxy engine<small>Scramjet handles most modern sites. Try Ultraviolet if a site breaks.</small></label>
+        <select id="proxy" data-setting="proxy">
+          <option value="sj">Scramjet</option>
+          <option value="uv">Ultraviolet</option>
+        </select>
+      </div>
+      <div class="row">
+        <label for="transport">Transport<small>How your browser talks to the server.</small></label>
+        <select id="transport" data-setting="transport">
+          <option value="epoxy">Epoxy</option>
+          <option value="libcurl">libcurl</option>
+        </select>
+      </div>
+      <div class="row">
+        <label for="wisp-url">Wisp server<small>Leave blank to use this server.</small></label>
+        <input id="wisp-url" type="text" data-setting="wisp-url" placeholder="wss://example.com/wisp/" spellcheck="false" />
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="row">
+        <label>Reset<small>Restore the default settings.</small></label>
+        <button id="reset" class="btn danger" type="button">Reset settings</button>
+      </div>
+    </section>
+
+    <p class="saved" id="saved" aria-live="polite"></p>
+  </main>
+  <script src="/assets/js/settings.js"></script>
+</body>
+</html>

@@ -1,0 +1,21 @@
+{
+  "name": "bark-proxy",
+  "description": "The proxy server behind the bark Browser",
+  "keywords": [
+    "proxy",
+    "wisp",
+    "scramjet",
+    "ultraviolet"
+  ],
+  "env": {
+    "BARK_SITE": {
+      "description": "Your bark website, e.g. https://yourdomain.com (access codes are checked against its access.txt)",
+      "required": true
+    },
+    "SESSION_SECRET": {
+      "description": "Any long random string",
+      "generator": "secret"
+    }
+  },
+  "image": "heroku/nodejs"
+}

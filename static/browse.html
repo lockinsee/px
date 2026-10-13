@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="referrer" content="no-referrer" />
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700;800&display=swap" />
+  <link rel="stylesheet" href="/assets/css/app.css" />
+  <script src="/app-config.js"></script>
+  <script src="/assets/js/storage.js"></script>
+  <script src="/assets/js/app.js"></script>
+  <link rel="stylesheet" href="/assets/css/browse.css" />
+  <title>Browse</title>
+</head>
+<body class="browser">
+  <div class="chrome">
+    <div class="tabstrip">
+      <ul id="tabs" class="tabs"></ul>
+      <button class="tool" type="button" data-action="new-tab" title="New tab (Ctrl+Alt+T)" aria-label="New tab">
+        <svg class="icon" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+      </button>
+    </div>
+    <div class="toolbar">
+      <button class="tool" type="button" data-action="back" title="Back" aria-label="Back"><svg class="icon" viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg></button>
+      <button class="tool" type="button" data-action="forward" title="Forward" aria-label="Forward"><svg class="icon" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg></button>
+      <button class="tool" type="button" data-action="reload" title="Reload" aria-label="Reload"><svg class="icon" viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-2.6-6.4L21 8"/><path d="M21 3v5h-5"/></svg></button>
+      <button class="tool" type="button" data-action="home" title="Home" aria-label="Home"><svg class="icon" viewBox="0 0 24 24"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/></svg></button>
+      <form id="address-form" class="address">
+        <input id="address" type="text" placeholder="Search or enter a URL" autocomplete="off" spellcheck="false" aria-label="Address" />
+      </form>
+      <button class="tool" type="button" data-action="popout" title="Open in its own tab" aria-label="Open in its own tab"><svg class="icon" viewBox="0 0 24 24"><path d="M14 4h6v6"/><path d="M20 4l-9 9"/><path d="M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></svg></button>
+      <button class="tool" type="button" data-action="fullscreen" title="Fullscreen" aria-label="Fullscreen"><svg class="icon" viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
+      <button class="tool" type="button" data-action="devtools" title="Developer tools" aria-label="Developer tools"><svg class="icon" viewBox="0 0 24 24"><path d="M8 7l-5 5 5 5M16 7l5 5-5 5"/></svg></button>
+      <button class="tool" type="button" data-action="settings" title="Settings" aria-label="Settings"><svg class="icon" viewBox="0 0 24 24"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></svg></button>
+    </div>
+  </div>
+  <div id="frames" class="frames"></div>
+  <script src="/assets/js/vendor.js"></script>
+  <script src="/assets/ultraviolet/uv.bundle.js"></script>
+  <script src="/assets/ultraviolet/uv.config.js"></script>
+  <script src="/assets/scramjet/scramjet.all.js"></script>
+  <script src="/assets/scramjet/scramjet.config.js"></script>
+  <script src="/assets/js/proxy.js"></script>
+  <script src="/assets/js/browse.js"></script>
+</body>
+</html>

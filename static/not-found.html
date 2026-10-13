@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="referrer" content="no-referrer" />
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700;800&display=swap" />
+  <link rel="stylesheet" href="/assets/css/app.css" />
+  <script src="/app-config.js"></script>
+  <script src="/assets/js/storage.js"></script>
+  <script src="/assets/js/app.js"></script>
+  <title>Site not found</title>
+</head>
+<body data-title="Site not found">
+  <div class="orbs" aria-hidden="true"><i></i><i></i><i></i></div>
+  <main class="message">
+    <div>
+      <h1>Site not found</h1>
+      <p id="what"></p>
+      <p>The domain doesn't exist. Check the address for typos.</p>
+    </div>
+  </main>
+  <script>
+    (() => {
+      const info = decodeURIComponent(location.hash.slice(1));
+      let host = info.slice(info.indexOf("|") + 1);
+      try { host = new URL(host).hostname || host; } catch {}
+      document.getElementById("what").textContent = `${host || "This address"} could not be found.`;
+    })();
+  </script>
+</body>
+</html>
