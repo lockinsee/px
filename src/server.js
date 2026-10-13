@@ -8,6 +8,7 @@ import chalk from "chalk";
 import express from "express";
 import config from "../config.js";
 import { createAccess } from "./access.js";
+import { createChat } from "./chat.js";
 import { createBlockVerdict, setupFiltering } from "./filtering/index.js";
 
 const require = createRequire(import.meta.url);
@@ -58,6 +59,24 @@ if (access.enabled) {
   console.log(chalk.yellow("⚠️  No BARK_SITE or AUTH_USERS set: anyone who finds this server can use it as a proxy."));
 }
 
+// Messages and calls. Needs sign-in, since people are identified by their access code.
+function parseIceServers() {
+  const servers = [{ urls: (process.env.STUN_URLS || "stun:stun.l.google.com:19302,stun:stun.cloudflare.com:3478").split(",") }];
+  if (process.env.TURN_URLS) {
+    servers.push({ urls: process.env.TURN_URLS.split(","), username: process.env.TURN_USERNAME ?? "", credential: process.env.TURN_CREDENTIAL ?? "" });
+  }
+  return servers;
+}
+const chat = access.enabled
+  ? createChat({
+      access,
+      channels: config.chat?.channels,
+      iceServers: parseIceServers(),
+      dataDir: process.env.DATA_DIR || path.join(ROOT, "data"),
+    })
+  : null;
+if (!chat) console.log(chalk.yellow("💬 Messages are off until sign-in is set up (BARK_SITE or AUTH_USERS)."));
+
 // Health check for hosting platforms, before the sign-in wall.
 app.get("/healthz", (_req, res) => res.type("text/plain").send("ok"));
 app.use(access.middleware);
@@ -85,7 +104,7 @@ app.post("/filter/verdict", async (req, res) => {
   res.set("Cache-Control", "no-store").json(await blockVerdict(host));
 });
 
-const pages = { "/": "index.html", "/browse": "browse.html", "/settings": "settings.html" };
+const pages = { "/": "index.html", "/browse": "browse.html", "/settings": "settings.html", "/chat": "chat.html" };
 for (const [route, file] of Object.entries(pages)) {
   app.get(route, (_req, res) => res.sendFile(path.join(STATIC_DIR, file)));
 }
@@ -115,11 +134,38 @@ app.use((err, _req, res, _next) => {
 
 const server = http.createServer(app);
 
+// WebSockets must come from pages on this same site, so other websites can't connect as you.
+function sameOrigin(req) {
+  const origin = req.headers.origin;
+  if (!origin) return true; // not a browser (e.g. a script with your login)
+  try {
+    return new URL(origin).host === req.headers.host;
+  } catch {
+    return false;
+  }
+}
+
 server.on("upgrade", (req, socket, head) => {
-  if (!req.url?.startsWith("/wisp/")) return socket.destroy();
-  if (!access.allowsUpgrade(req)) return socket.destroy();
-  wisp.routeRequest(req, socket, head);
+  if (!sameOrigin(req)) return socket.destroy();
+  if (req.url?.startsWith("/wisp/")) {
+    if (!access.allowsUpgrade(req)) return socket.destroy();
+    return wisp.routeRequest(req, socket, head);
+  }
+  if (req.url?.split("?")[0] === "/chat/ws" && chat) {
+    const identity = access.identify(req);
+    if (!identity) return socket.destroy();
+    return chat.handleUpgrade(req, socket, head, identity);
+  }
+  socket.destroy();
 });
+
+// Save chat history before the host stops the server (e.g. on redeploy).
+for (const signal of ["SIGTERM", "SIGINT"]) {
+  process.on(signal, () => {
+    chat?.flush();
+    process.exit(0);
+  });
+}
 
 server.listen({ port: PORT }, () => {
   console.log(chalk.green(`🌍 ${config.name} is running on http://localhost:${PORT}`));

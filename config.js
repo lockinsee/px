@@ -21,6 +21,13 @@ const config = {
   // are deliberately proxying to your own internal services and the instance is password protected.
   allowPrivateNetwork: false,
 
+  // Messages. Channels everyone with an access code can see; DMs are always private to the two
+  // people in them. History is saved in DATA_DIR (default ./data) - on Railway, attach a Volume
+  // at /app/data so it survives redeploys.
+  chat: {
+    channels: ["general", "random"],
+  },
+
   // Optional DNS filtering for proxied traffic.
   filtering: {
     enabled: false,

@@ -9,7 +9,7 @@
 // WebSocket checks (browsers don't reliably send Basic Auth on WebSocket connections).
 import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 
-const REFRESH_MS = 5 * 60 * 1000;
+const REFRESH_MS = Number(process.env.ACCESS_REFRESH_MS) || 5 * 60 * 1000;
 const SESSION_MS = 12 * 60 * 60 * 1000;
 const COOKIE = "bark_session";
 
@@ -78,12 +78,15 @@ export function createAccess({ barkSite, authUsers, sessionSecret, log = console
       return response.text();
     });
 
+  const refreshListeners = new Set();
+
   async function refresh() {
     if (!site) return;
     try {
       const text = await download(`${site}/access.txt?t=${Date.now()}`);
       codes = parseAccessList(text);
       log(`bark access list loaded: ${codes.size} code${codes.size === 1 ? "" : "s"}`);
+      for (const listener of refreshListeners) listener();
     } catch (error) {
       warn(`Couldn't download ${site}/access.txt: ${error.message}${codes ? " (keeping the previous list)" : ""}`);
     }
@@ -182,5 +185,45 @@ export function createAccess({ barkSite, authUsers, sessionSecret, log = console
     return Boolean(fromCookie(req) || fromBasicAuth(req));
   }
 
-  return { enabled, start, stop, middleware, allowsUpgrade, checkLogin, hasCodes: () => Boolean(codes) };
+  /** The signed-in identity for a request ("code:<hash>" or "user:<name>"), or null. */
+  function identify(req) {
+    if (!enabled) return null;
+    return fromCookie(req) || fromBasicAuth(req);
+  }
+
+  /** Public profile for an identity: a stable id that doesn't reveal the code, and a name. */
+  function profileFor(identity) {
+    if (identity?.startsWith("code:")) {
+      const hash = identity.slice(5);
+      return { id: `c${hash.slice(0, 16)}`, name: codes?.get(hash) ?? "Member" };
+    }
+    if (identity?.startsWith("user:")) {
+      const name = identity.slice(5);
+      return { id: `u${sha256hex(`user:${name}`).slice(0, 16)}`, name };
+    }
+    return null;
+  }
+
+  /** Everyone who currently has access, so people can message members who are offline. */
+  function members() {
+    const list = [];
+    for (const hash of codes?.keys() ?? []) list.push(profileFor(`code:${hash}`));
+    for (const name of users.keys()) list.push(profileFor(`user:${name}`));
+    return list;
+  }
+
+  return {
+    enabled,
+    start,
+    stop,
+    middleware,
+    allowsUpgrade,
+    checkLogin,
+    identify,
+    profileFor,
+    members,
+    stillValid,
+    onRefresh: listener => refreshListeners.add(listener),
+    hasCodes: () => Boolean(codes),
+  };
 }

@@ -46,6 +46,9 @@ importers:
       express:
         specifier: ^4.21.2
         version: 4.22.3
+      ws:
+        specifier: 8.18.3
+        version: 8.18.3(bufferutil@4.1.0)
     devDependencies:
       '@biomejs/biome':
         specifier: 2.2.2
@@ -506,8 +509,8 @@ packages:
     resolution: {integrity: sha512-BNGbWLfd0eUPabhkXUVm0j8uuvREyTh5ovRa/dyow/BqAbZJyC+5fU+IzQOzmAKzYqYRAISoRhdQr3eIZ/PXqg==}
     engines: {node: '>= 0.8'}
 
-  ws@8.22.0:
-    resolution: {integrity: sha512-Ydggc987+RO0AnWtZ/7Wq9FtNvcrL1b/RO0ud9mWjUPgDrsAAwQSF51sm2hm1XofbU/4jkpGEsLFsZZxU+1DOg==}
+  ws@8.18.3:
+    resolution: {integrity: sha512-PEIGCY5tSlUt50cqyMXfCzX+oOPqN0vuGqWzbcJ2xvnkzkq46oOpz7dQaTDBdfICb4N14+GARUDw2XV2N4tvzg==}
     engines: {node: '>=10.0.0'}
     peerDependencies:
       bufferutil: ^4.0.1
@@ -583,7 +586,7 @@ snapshots:
       bufferutil: 4.1.0
       commander: 14.0.3
       ipaddr.js: 2.5.0
-      ws: 8.22.0(bufferutil@4.1.0)
+      ws: 8.18.3(bufferutil@4.1.0)
     transitivePeerDependencies:
       - utf-8-validate
 
@@ -986,6 +989,6 @@ snapshots:
 
   vary@1.1.2: {}
 
-  ws@8.22.0(bufferutil@4.1.0):
+  ws@8.18.3(bufferutil@4.1.0):
     optionalDependencies:
       bufferutil: 4.1.0

@@ -11,7 +11,7 @@
     "lint": "biome lint --write ."
   },
   "author": "",
-  "license": "GPL-3.0-or-later",
+  "license": "AGPL-3.0-or-later",
   "dependencies": {
     "@mercuryworkshop/bare-mux": "^2.1.9",
     "@mercuryworkshop/epoxy-transport": "file:vendor/mercuryworkshop-epoxy-transport-2.1.28-epx.e5f13bb.tgz",
@@ -21,7 +21,8 @@
     "@titaniumnetwork-dev/ultraviolet": "^3.2.10",
     "chalk": "^5.4.1",
     "dotenv": "^17.2.0",
-    "express": "^4.21.2"
+    "express": "^4.21.2",
+    "ws": "8.18.3"
   },
   "devDependencies": {
     "@biomejs/biome": "2.2.2"
@@ -38,5 +39,5 @@
       "@mercuryworkshop/bare-mux@2.1.9": "patches/@mercuryworkshop__bare-mux@2.1.9.patch"
     }
   },
-  "description": "The proxy server behind the bark Browser (based on Interstellar, GPL-3.0)"
+  "description": "The proxy server behind the bark Browser (based on Interstellar, AGPL-3.0)"
 }
