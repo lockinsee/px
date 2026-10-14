@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="referrer" content="no-referrer" />
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  <title>Opening…</title>
+  <style>
+    :root { color-scheme: dark; }
+    html, body { margin: 0; height: 100%; background: #09090a; color: #a9a9b2; font-family: -apple-system, BlinkMacSystemFont, "Inter Tight", sans-serif; }
+    main { height: 100%; display: grid; place-items: center; text-align: center; }
+    .spin { width: 28px; height: 28px; margin: 0 auto 14px; border-radius: 50%; border: 3px solid rgba(255, 255, 255, 0.12); border-top-color: #f4f4f6; animation: spin 0.8s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    p { margin: 0; font-size: 14px; }
+  </style>
+  <script src="/app-config.js"></script>
+  <script src="/assets/js/storage.js"></script>
+  <script src="/assets/js/app.js"></script>
+</head>
+<body>
+  <!-- Opens one website through the bark proxy as a plain full-window page (no address bar).
+       Used by the bark Mac app's sidebar: /open?url=https://www.tiktok.com/ -->
+  <main><div><div class="spin"></div><p id="status">Opening privately…</p></div></main>
+  <script src="/assets/js/vendor.js"></script>
+  <script src="/assets/ultraviolet/uv.bundle.js"></script>
+  <script src="/assets/ultraviolet/uv.config.js"></script>
+  <script src="/assets/scramjet/scramjet.all.js"></script>
+  <script src="/assets/scramjet/scramjet.config.js"></script>
+  <script src="/assets/js/proxy.js"></script>
+  <script>
+    (async () => {
+      const status = document.getElementById("status");
+      const raw = new URLSearchParams(location.search).get("url") || "";
+      let target;
+      try {
+        target = new URL(raw);
+        if (target.protocol !== "https:" && target.protocol !== "http:") throw new Error();
+      } catch {
+        status.textContent = "That address can't be opened.";
+        return;
+      }
+      document.title = target.hostname;
+      const { src } = await window.proxy.resolve(target.href);
+      // Replace this page, so Back doesn't return to the loading screen.
+      location.replace(src);
+    })();
+  </script>
+</body>
+</html>

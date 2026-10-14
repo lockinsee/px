@@ -121,7 +121,7 @@ app.post("/filter/verdict", async (req, res) => {
   res.set("Cache-Control", "no-store").json(await blockVerdict(host));
 });
 
-const pages = { "/": "index.html", "/browse": "browse.html", "/settings": "settings.html", "/chat": "chat.html" };
+const pages = { "/": "index.html", "/browse": "browse.html", "/settings": "settings.html", "/chat": "chat.html", "/open": "open.html" };
 for (const [route, file] of Object.entries(pages)) {
   app.get(route, (_req, res) => res.sendFile(path.join(STATIC_DIR, file)));
 }
