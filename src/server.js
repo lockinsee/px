@@ -51,15 +51,30 @@ app.disable("x-powered-by");
 
 app.set("trust proxy", true); // so secure cookies work behind Render/Koyeb/nginx
 
-const access = createAccess({ barkSite: config.barkSite, authUsers: config.authUsers, sessionSecret: config.sessionSecret });
+const DATA_DIR = process.env.DATA_DIR || path.join(ROOT, "data");
+const access = createAccess({
+  requireSignIn: config.requireSignIn,
+  inviteOnly: config.inviteOnly,
+  barkSite: config.barkSite,
+  allowedEmails: config.allowedEmails,
+  googleClientId: config.google.clientId,
+  googleClientSecret: config.google.clientSecret,
+  publicUrl: config.publicUrl,
+  sessionSecret: config.sessionSecret,
+  dataDir: DATA_DIR,
+});
 await access.start();
-if (access.enabled) {
-  console.log(chalk.green(`🔒 Sign-in required${config.barkSite ? ` (bark access codes from ${config.barkSite})` : ""}`));
+if (access.open) {
+  console.log(chalk.green("🌍 Open access: no sign-in. Everyone gets a guest identity automatically."));
+  if (!config.sessionSecret) console.log(chalk.yellow("⚠️  SESSION_SECRET isn't set: guests get new identities (and lose their names) whenever the server restarts."));
+} else if (access.enabled) {
+  console.log(chalk.green(config.inviteOnly ? `🔒 Sign in with Google, invite list only (${config.barkSite}/access.txt)` : "🔒 Sign in with Google: any Google account can get in"));
+  if (!config.sessionSecret) console.log(chalk.yellow("⚠️  SESSION_SECRET isn't set: everyone will be signed out whenever the server restarts."));
 } else {
-  console.log(chalk.yellow("⚠️  No BARK_SITE or AUTH_USERS set: anyone who finds this server can use it as a proxy."));
+  console.log(chalk.yellow("⚠️  REQUIRE_SIGN_IN is on but GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET aren't set: nobody can sign in."));
 }
 
-// Messages and calls. Needs sign-in, since people are identified by their access code.
+// Messages and calls. People are identified by their Google account.
 function parseIceServers() {
   const servers = [{ urls: (process.env.STUN_URLS || "stun:stun.l.google.com:19302,stun:stun.cloudflare.com:3478").split(",") }];
   if (process.env.TURN_URLS) {
@@ -72,13 +87,15 @@ const chat = access.enabled
       access,
       channels: config.chat?.channels,
       iceServers: parseIceServers(),
-      dataDir: process.env.DATA_DIR || path.join(ROOT, "data"),
+      dataDir: DATA_DIR,
     })
   : null;
-if (!chat) console.log(chalk.yellow("💬 Messages are off until sign-in is set up (BARK_SITE or AUTH_USERS)."));
 
-// Health check for hosting platforms, before the sign-in wall.
+// Pages that work before signing in: health check, the sign-in page and Google's return trip.
 app.get("/healthz", (_req, res) => res.type("text/plain").send("ok"));
+app.get("/signin", (_req, res) => (access.open ? res.redirect(302, "/chat") : res.sendFile(path.join(STATIC_DIR, "signin.html"))));
+for (const file of ["favicon.svg", "robots.txt"]) app.get(`/${file}`, (_req, res) => res.sendFile(path.join(STATIC_DIR, file)));
+access.mountRoutes(app);
 app.use(access.middleware);
 
 app.use(express.json({ limit: "1kb" }));

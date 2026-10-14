@@ -8,8 +8,12 @@
     "ultraviolet"
   ],
   "env": {
-    "BARK_SITE": {
-      "description": "Your bark website, e.g. https://yourdomain.com (access codes are checked against its access.txt)",
+    "GOOGLE_CLIENT_ID": {
+      "description": "Google OAuth client ID (Web application)",
+      "required": true
+    },
+    "GOOGLE_CLIENT_SECRET": {
+      "description": "Google OAuth client secret",
       "required": true
     },
     "SESSION_SECRET": {

@@ -5,7 +5,9 @@ services:
     plan: free
     healthCheckPath: /healthz
     envVars:
-      - key: BARK_SITE
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
         sync: false
       - key: SESSION_SECRET
         generateValue: true

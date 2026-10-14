@@ -164,6 +164,25 @@ body.chat {
   font-weight: 600;
 }
 
+.me-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.signout {
+  color: var(--faint);
+  font-size: 12px;
+  font-weight: 500;
+  text-decoration: none;
+}
+
+.signout:hover {
+  color: var(--text);
+}
+
 /* ---------- room ---------- */
 .room {
   flex: 1;
@@ -559,6 +578,68 @@ body.chat {
 
 .round.danger {
   background: #e5484d;
+}
+
+/* ---------- name picker ---------- */
+.name-dialog {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(6px);
+}
+
+.name-card {
+  width: min(400px, 100%);
+  display: grid;
+  gap: 12px;
+  padding: 28px;
+  border-radius: 20px;
+  border: 1px solid var(--border-2);
+  background: #141417;
+}
+
+.name-card h2 {
+  margin: 0;
+  font-size: 20px;
+  letter-spacing: -0.02em;
+}
+
+.name-card p {
+  margin: 0 0 6px;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.name-card input {
+  height: 44px;
+  padding: 0 14px;
+  border-radius: 12px;
+  border: 1px solid var(--border-2);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text);
+  font: inherit;
+  font-size: 16px;
+  outline: none;
+}
+
+.name-card input:focus {
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+.name-card .pill {
+  height: 42px;
+}
+
+.me-name.editable {
+  cursor: pointer;
+}
+
+.me-name.editable:hover {
+  text-decoration: underline;
 }
 
 /* ---------- ring + banner ---------- */

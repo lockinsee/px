@@ -28,6 +28,7 @@
     <div class="me" id="me">
       <span class="avatar" id="me-avatar"></span>
       <span class="me-name" id="me-name">Connecting…</span>
+      <a class="signout" id="signout" href="/auth/signout" title="Sign out">Sign out</a>
     </div>
   </aside>
 
@@ -84,6 +85,15 @@
   </div>
 
   <div id="banner" class="banner" hidden></div>
+
+  <div id="name-dialog" class="name-dialog" hidden>
+    <form id="name-form" class="name-card" autocomplete="off">
+      <h2>What should people call you?</h2>
+      <p>This is the name everyone sees in Messages. You can change it any time by clicking your name.</p>
+      <input id="name-input" maxlength="32" placeholder="Your name" aria-label="Your name" />
+      <button class="pill accept" type="submit">Continue</button>
+    </form>
+  </div>
 
   <script src="/assets/js/chat.js"></script>
 </body>

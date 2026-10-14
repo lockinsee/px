@@ -2,14 +2,34 @@ const config = {
   // Shown in the page title and header.
   name: "bark",
 
-  // Your bark website (where access.txt lives). Anyone with a valid bark access code can sign in;
-  // remove their line from access.txt and they're locked out within 5 minutes.
+  // Sign in with Google (default). Set REQUIRE_SIGN_IN=false for no sign-in at all
+  // (anonymous guests who pick a name in Messages).
+  requireSignIn: process.env.REQUIRE_SIGN_IN !== "false",
+
+  // false (default): any Google account can sign in.
+  // true (INVITE_ONLY=true): only accounts on the invite list in BARK_SITE/access.txt.
+  inviteOnly: process.env.INVITE_ONLY === "true",
+
+  // Only used with INVITE_ONLY.
+  // Your bark website. Its access.txt is the invite list: one "name: email@gmail.com" per line.
+  // Remove a line and that person is signed out within 5 minutes.
   barkSite: process.env.BARK_SITE ?? "",
 
-  // Optional extra logins as "user:password,otheruser:otherpassword".
-  authUsers: process.env.AUTH_USERS ?? "",
+  // Google sign-in (from Google Cloud Console → APIs & Services → Credentials → OAuth client ID).
+  google: {
+    clientId: process.env.GOOGLE_CLIENT_ID ?? "",
+    clientSecret: process.env.GOOGLE_CLIENT_SECRET ?? "",
+  },
 
-  // Signs session cookies. Set it so sign-ins survive restarts; otherwise a random one is used.
+  // This server's public address, e.g. https://bark-proxy-production.up.railway.app. Google sends
+  // people back to PUBLIC_URL/auth/google/callback. Worked out automatically if left empty.
+  publicUrl: process.env.PUBLIC_URL ?? "",
+
+  // Only used with INVITE_ONLY: extra invited emails besides access.txt, comma-separated
+  // (e.g. your own, so you can't lock yourself out).
+  allowedEmails: process.env.ALLOWED_EMAILS ?? "",
+
+  // Signs sessions. Set it so people stay signed in when the server restarts.
   sessionSecret: process.env.SESSION_SECRET ?? "",
 
   // Domains the proxy refuses to open. Each entry also blocks its subdomains,
@@ -28,7 +48,7 @@ const config = {
     channels: ["general", "random"],
   },
 
-  // Optional DNS filtering for proxied traffic.
+  // Optional DNS filtering for the Browser.
   filtering: {
     enabled: false,
     cloudflareFamilies: false, // Block malware and adult sites via Cloudflare's family resolver.

@@ -14,8 +14,6 @@ const KEEP_PER_CONVERSATION = 2000;
 const RECENT_ON_CONNECT = 50;
 const HISTORY_PAGE = 50;
 const MAX_CALL_SIZE = 8;
-const RATE_WINDOW_MS = 10_000;
-const RATE_MAX = 60; // messages per connection per window
 
 const newId = () => randomBytes(9).toString("base64url");
 
@@ -91,7 +89,7 @@ export function createChat({ access, channels, iceServers, dataDir, log = consol
   const channelIds = new Set(channelList.map(c => c.id));
 
   const wss = new WebSocketServer({ noServer: true, maxPayload: 64 * 1024 });
-  const clients = new Set(); // { ws, identity, me, rate }
+  const clients = new Set(); // { ws, identity, me }
   const calls = new Map(); // conv -> Map(userId -> client)
 
   const send = (client, payload) => {
@@ -200,9 +198,6 @@ export function createChat({ access, channels, iceServers, dataDir, log = consol
   function handle(client, msg) {
     const { me } = client;
     const now = Date.now();
-    client.rate = client.rate.filter(t => now - t < RATE_WINDOW_MS);
-    if (client.rate.length >= RATE_MAX) return send(client, { t: "error", message: "Slow down a little." });
-    client.rate.push(now);
 
     const conv = typeof msg.conv === "string" ? msg.conv : "";
     switch (msg.t) {
@@ -255,6 +250,18 @@ export function createChat({ access, channels, iceServers, dataDir, log = consol
         if (target) send(target, { t: "signal", conv, from: me.id, data: msg.data });
         return;
       }
+      case "set-name": {
+        // Guests (open access) choose their own display name.
+        if (!access.setName?.(client.identity, msg.name)) return send(client, { t: "error", message: "Pick a name between 1 and 32 characters." });
+        const updated = access.profileFor(client.identity);
+        for (const c of clients) {
+          if (c.identity !== client.identity) continue;
+          c.me = updated;
+          send(c, { t: "me", me: updated });
+        }
+        broadcastMembers();
+        return;
+      }
       case "media": {
         // Mute / camera on-off indicators for the other people in the call.
         const room = calls.get(conv);
@@ -267,8 +274,9 @@ export function createChat({ access, channels, iceServers, dataDir, log = consol
   }
 
   function connect(ws, identity) {
+    access.touch?.(identity);
     const me = access.profileFor(identity);
-    const client = { ws, identity, me, rate: [] };
+    const client = { ws, identity, me };
     const wasOnline = onlineIds().has(me.id);
     clients.add(client);
 

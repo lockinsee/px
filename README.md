@@ -5,10 +5,10 @@ The server behind the bark Mac app:
 - **Messages** (`/chat`): channels, private one-on-one DMs, and voice/video calls.
 - **Browser** (`/browse`): a web proxy. It loads websites on the server and streams them back.
 
-Sign-in uses **bark access codes**: the server reads `access.txt` from your bark website, the same
-list the Mac app uses. Remove someone's line and they lose the Browser within 5 minutes too. The
-Mac app signs in for you, and in a normal web browser you can sign in with any username and your
-access code as the password.
+People **sign in with Google**, and any Google account can get in. The Mac app signs in through
+Apple's secure sign-in window and keeps the session; on the web it's a cookie. Optional:
+`INVITE_ONLY=true` limits it to the invite list in `BARK_SITE/access.txt`, and
+`REQUIRE_SIGN_IN=false` turns sign-in off entirely (anonymous guests pick a name).
 
 ## Run it
 
@@ -16,24 +16,21 @@ Needs a host that runs Node.js 18+ **and WebSockets**: Render, Koyeb, Fly.io, Ra
 your own computer. Shared/static web hosting (like the plan your bark website is on) can't run it.
 
 ```bash
-cp .env.example .env      # then set BARK_SITE to your bark website
+cp .env.example .env      # then fill in the Google client ID/secret
 pnpm install              # or: npm install
 pnpm start                # http://localhost:8080
 ```
 
 With Docker: `docker build -t bark-proxy . && docker run -p 8080:8080 --env-file .env bark-proxy`
 
-On Render, the included `render.yaml` sets it up; just fill in `BARK_SITE`.
-
-Then tell the Mac app where it is: put the server's address in `website/proxy.txt` and upload it
-(see the main bark README).
+Google sign-in setup (client ID and secret, redirect URI) is in the main bark README, step 2.
+The redirect URI is this server's address + `/auth/google/callback`.
 
 ## Messages and calls
 
-- Everyone with a bark access code can sign in. Their name is the one next to their code in
-  `access.txt` (e.g. `sam: …` shows up as "sam"). Remove the line and they're signed out within
-  5 minutes.
-- Channels are listed in `config.js` (`chat.channels`). Everyone with a code can read them.
+- People show up under their Google name. Everyone who signed in during the last month is in
+  the people list, so you can DM them.
+- Channels are listed in `config.js` (`chat.channels`). Everyone signed in can read them.
   DMs can only be read by the two people in them.
 - Messages are saved in `DATA_DIR/chat.json` (default `./data`). **On Railway, add a Volume** to
   the service with mount path `/app/data`, or history is lost every time it redeploys.
@@ -55,8 +52,9 @@ Then tell the Mac app where it is: put the server's address in `website/proxy.tx
 - `filtering`: optional ad / tracker blocking (AdGuard DNS list) and Cloudflare's malware and
   adult-content filter.
 
-Environment: `BARK_SITE`, `SESSION_SECRET`, optional `AUTH_USERS` (`user:password,…`), `PORT`,
-`DATA_DIR`, and for calls on strict networks `TURN_URLS` / `TURN_USERNAME` / `TURN_CREDENTIAL`.
+Environment: `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `SESSION_SECRET`, optional `INVITE_ONLY`
+(+ `BARK_SITE`, `ALLOWED_EMAILS`), `REQUIRE_SIGN_IN`, `PUBLIC_URL`, `PORT`, `DATA_DIR`, and for
+calls on strict networks `TURN_URLS` / `TURN_USERNAME` / `TURN_CREDENTIAL`.
 
 ## Credits and license
 

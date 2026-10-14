@@ -10,6 +10,7 @@
 
   // The bark Mac app listens for these to show notifications and the Dock badge.
   const bridge = window.webkit?.messageHandlers?.bark;
+  if (bridge) document.getElementById("signout").hidden = true;
   const tellApp = payload => {
     try {
       bridge?.postMessage(payload);
@@ -148,6 +149,7 @@
   let ws = null;
   let retry = 0;
   let stopped = false;
+  let everConnected = false;
   const outbox = [];
 
   function wsSend(payload) {
@@ -160,6 +162,7 @@
     ws = new WebSocket(`${proto}://${location.host}/chat/ws`);
     ws.onopen = () => {
       retry = 0;
+      everConnected = true;
       banner("");
     };
     ws.onmessage = event => {
@@ -179,6 +182,11 @@
         return;
       }
       if (stopped) return;
+      // Never connected at all: probably signed out, so reload to get the sign-in page.
+      if (!everConnected && retry >= 2) {
+        location.reload();
+        return;
+      }
       retry = Math.min(retry + 1, 6);
       banner("Reconnecting…", 0);
       setTimeout(connect, 500 * 2 ** retry);
@@ -197,12 +205,28 @@
       }
       state.calls = new Map(msg.calls.map(c => [c.conv, c.members]));
       $("me-name").textContent = msg.me.name;
+      // Open access: guests pick their own name (and can change it by clicking it).
+      state.guest = msg.me.named !== undefined;
+      $("me-name").classList.toggle("editable", state.guest);
+      if (state.guest) {
+        $("me-name").title = "Change your name";
+        $("signout").hidden = true;
+      }
+      if (msg.me.named === false) openNameDialog();
       $("me-avatar").replaceWith(Object.assign(avatar(msg.me.id), { id: "me-avatar" }));
       if (!state.current) state.current = storageGet("chat.current", null);
       if (!state.current || !canSee(state.current)) state.current = state.channels[0]?.id;
       for (const p of outbox.splice(0)) wsSend(p);
       renderSidebar();
       openConv(state.current, true);
+    },
+    me(msg) {
+      state.me = msg.me;
+      $("me-name").textContent = msg.me.name;
+      $("me-avatar").replaceWith(Object.assign(avatar(msg.me.id), { id: "me-avatar" }));
+      renderSidebar();
+      renderHeader();
+      if (state.current) renderMessages(false);
     },
     members(msg) {
       state.users = new Map(msg.users.map(u => [u.id, u]));
@@ -783,6 +807,26 @@
   $("ring-decline").addEventListener("click", () => {
     if (ringing) wsSend({ t: "decline", conv: ringing.conv });
     stopRing();
+  });
+
+  // ---------- choosing a name ----------
+
+  function openNameDialog() {
+    $("name-input").value = state.me?.named ? state.me.name : "";
+    $("name-dialog").hidden = false;
+    setTimeout(() => $("name-input").focus(), 0);
+  }
+
+  $("name-form").addEventListener("submit", event => {
+    event.preventDefault();
+    const name = $("name-input").value.trim();
+    if (!name) return;
+    wsSend({ t: "set-name", name });
+    $("name-dialog").hidden = true;
+  });
+
+  $("me-name").addEventListener("click", () => {
+    if (state.guest) openNameDialog();
   });
 
   // ---------- app integration ----------
