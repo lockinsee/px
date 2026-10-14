@@ -196,6 +196,19 @@ export function createAccess({ requireSignIn = true, inviteOnly = false, barkSit
     return identity && stillValid(identity) ? identity : null;
   }
 
+  // Keys for the Mac app's tunnel (src/tunnel.js). They're signed like sessions but marked
+  // "tunnel:", so a tunnel key can never be used to sign in to Messages.
+  const TUNNEL_MS = 30 * 24 * 60 * 60 * 1000;
+  function tunnelKey(identity) {
+    return makeSession(null, `tunnel:${identity}`, TUNNEL_MS);
+  }
+  function readTunnelKey(value) {
+    const marked = verifySigned(value);
+    if (!marked?.startsWith("tunnel:")) return null;
+    const identity = marked.slice(7);
+    return stillValid(identity) ? identity : null;
+  }
+
   /** The signed-in identity ("google:<email>") for a request, from the cookie or a Bearer token. */
   function identify(req) {
     if (!open && !enabled) return null;
@@ -412,6 +425,8 @@ h1{font-size:26px;letter-spacing:-.03em;margin:0 0 10px}p{color:#a9a9b2;max-widt
     middleware,
     allowsUpgrade,
     identify,
+    tunnelKey,
+    readTunnelKey,
     profileFor,
     members,
     stillValid,

@@ -9,6 +9,7 @@ import express from "express";
 import config from "../config.js";
 import { createAccess } from "./access.js";
 import { createChat } from "./chat.js";
+import { startTunnel } from "./tunnel.js";
 import { createBlockVerdict, setupFiltering } from "./filtering/index.js";
 
 const require = createRequire(import.meta.url);
@@ -119,6 +120,24 @@ app.get("/app-config.js", (_req, res) => {
 app.post("/filter/verdict", async (req, res) => {
   const host = typeof req.body?.host === "string" ? req.body.host.slice(0, 254) : "";
   res.set("Cache-Control", "no-store").json(await blockVerdict(host));
+});
+
+// The Mac app's tunnel: sidebar apps send their traffic through this server (see src/tunnel.js).
+// On Railway: Settings → Networking → TCP Proxy → port 8081. Railway then sets
+// RAILWAY_TCP_PROXY_DOMAIN / RAILWAY_TCP_PROXY_PORT, which tell the app where to connect.
+const TUNNEL_PORT = Number(process.env.TUNNEL_PORT) || 8081;
+const tunnelHost = process.env.TUNNEL_PUBLIC_HOST || process.env.RAILWAY_TCP_PROXY_DOMAIN || "";
+const tunnelPort = Number(process.env.TUNNEL_PUBLIC_PORT || process.env.RAILWAY_TCP_PROXY_PORT) || 0;
+if (access.enabled && process.env.TUNNEL !== "off") {
+  startTunnel({ port: TUNNEL_PORT, readKey: access.readTunnelKey, allowPrivate, log: msg => console.log(chalk.green(`🔐 ${msg}`)) });
+  if (!tunnelHost || !tunnelPort) console.log(chalk.yellow("⚠️  The Mac app's tunnel has no public address yet: add a TCP Proxy for port 8081 in Railway (Settings → Networking)."));
+}
+app.get("/auth/tunnel", (req, res) => {
+  res.set("Cache-Control", "no-store");
+  const identity = access.identify(req);
+  if (!identity) return res.status(401).json({ available: false });
+  if (!tunnelHost || !tunnelPort) return res.json({ available: false });
+  res.json({ available: true, host: tunnelHost, port: tunnelPort, username: "bark", password: access.tunnelKey(identity) });
 });
 
 // Site icons for the Home screen and the Mac app's sidebar. The server fetches them (so your Mac
