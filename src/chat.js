@@ -122,11 +122,14 @@ export function createChat({ access, channels, iceServers, dataDir, log = consol
     for (const c of audience(conv)) if (c !== except) send(c, payload);
   }
 
+  // People who turned on Do not disturb (until the server restarts or they turn it off).
+  const quiet = new Set();
+
   function memberList() {
     const online = onlineIds();
     const byId = new Map();
-    for (const m of access.members()) byId.set(m.id, { ...m, online: online.has(m.id) });
-    for (const c of clients) if (!byId.has(c.me.id)) byId.set(c.me.id, { ...c.me, online: true });
+    for (const m of access.members()) byId.set(m.id, { ...m, online: online.has(m.id), dnd: quiet.has(m.id) });
+    for (const c of clients) if (!byId.has(c.me.id)) byId.set(c.me.id, { ...c.me, online: true, dnd: quiet.has(c.me.id) });
     return [...byId.values()].sort((a, b) => a.name.localeCompare(b.name));
   }
 
@@ -248,6 +251,15 @@ export function createChat({ access, channels, iceServers, dataDir, log = consol
         if (!room || room.get(me.id) !== client) return;
         const target = room.get(String(msg.to));
         if (target) send(target, { t: "signal", conv, from: me.id, data: msg.data });
+        return;
+      }
+      case "set-status": {
+        // Do not disturb: shown to everyone as a moon on your picture.
+        const on = Boolean(msg.dnd);
+        if (on === quiet.has(me.id)) return;
+        if (on) quiet.add(me.id);
+        else quiet.delete(me.id);
+        broadcastMembers();
         return;
       }
       case "set-name": {

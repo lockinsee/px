@@ -121,7 +121,33 @@ app.post("/filter/verdict", async (req, res) => {
   res.set("Cache-Control", "no-store").json(await blockVerdict(host));
 });
 
-const pages = { "/": "index.html", "/browse": "browse.html", "/settings": "settings.html", "/chat": "chat.html", "/open": "open.html" };
+// Site icons for the Home screen and the Mac app's sidebar. The server fetches them (so your Mac
+// never contacts the site just to draw an icon) and keeps them for a day.
+const iconCache = new Map();
+app.get("/icon", async (req, res) => {
+  const domain = String(req.query.domain ?? "").toLowerCase().replace(/^www\./, "");
+  if (domain.length > 200 || !/^[a-z0-9-]+(\.[a-z0-9-]+)+$/.test(domain)) return res.status(400).end();
+  const send = hit => res.type(hit.type).set("Cache-Control", "private, max-age=86400").send(hit.body);
+  const hit = iconCache.get(domain);
+  if (hit && hit.until > Date.now()) return send(hit);
+  try {
+    const response = await fetch(`https://www.google.com/s2/favicons?domain=${encodeURIComponent(domain)}&sz=128`, {
+      signal: AbortSignal.timeout(8000),
+    });
+    const type = response.headers.get("content-type") || "";
+    if (!response.ok || !type.startsWith("image/")) throw new Error(`no icon (${response.status})`);
+    const body = Buffer.from(await response.arrayBuffer());
+    if (body.length > 300_000) throw new Error("icon too large");
+    if (iconCache.size > 500) iconCache.clear();
+    const entry = { body, type, until: Date.now() + 86_400_000 };
+    iconCache.set(domain, entry);
+    send(entry);
+  } catch {
+    res.status(404).set("Cache-Control", "no-store").end();
+  }
+});
+
+const pages = { "/": "index.html", "/home": "hub.html", "/browse": "browse.html", "/settings": "settings.html", "/chat": "chat.html", "/open": "open.html" };
 for (const [route, file] of Object.entries(pages)) {
   app.get(route, (_req, res) => res.sendFile(path.join(STATIC_DIR, file)));
 }

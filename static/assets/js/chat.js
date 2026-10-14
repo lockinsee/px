@@ -214,6 +214,9 @@
       }
       if (msg.me.named === false) openNameDialog();
       $("me-avatar").replaceWith(Object.assign(avatar(msg.me.id), { id: "me-avatar" }));
+      // /chat?conv=… (from the Home screen) opens that conversation.
+      const wanted = new URLSearchParams(location.search).get("conv");
+      if (wanted && !state.current && canSee(wanted)) state.current = wanted;
       if (!state.current) state.current = storageGet("chat.current", null);
       if (!state.current || !canSee(state.current)) state.current = state.channels[0]?.id;
       for (const p of outbox.splice(0)) wsSend(p);

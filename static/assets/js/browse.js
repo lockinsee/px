@@ -280,6 +280,11 @@
     setTitle(frame);
   }, 1000);
 
+  // The bark Mac app's ⌘R and ⌘[ / ⌘] act on the open tab, not this page.
+  window.barkReload = () => actions.reload();
+  window.barkBack = () => actions.back();
+  window.barkForward = () => actions.forward();
+
   const initial = sessionStorage.getItem("open-url");
   sessionStorage.removeItem("open-url");
   openTab(initial);

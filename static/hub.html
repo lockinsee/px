@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="referrer" content="no-referrer" />
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  <title>Home</title>
+  <link rel="stylesheet" href="/assets/css/hub.css" />
+</head>
+<body>
+  <!-- bark's Home screen: what you opened last, your apps, who's around and your newest messages.
+       Shown in the bark Mac app (sidebar logo) and at /home on the bark server. -->
+  <main class="panel">
+    <header class="top">
+      <div>
+        <p class="date" id="date"></p>
+        <h1 id="greeting">Hello</h1>
+      </div>
+      <button class="square" id="compose" title="New message" aria-label="New message">
+        <svg viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+      </button>
+    </header>
+
+    <div class="grid">
+      <div class="col">
+        <section class="card launch">
+          <div class="last">
+            <div class="last-icon" id="last-icon"></div>
+            <div class="last-text">
+              <p class="eyebrow">Last opened</p>
+              <h2 id="last-name">TikTok</h2>
+            </div>
+            <button class="pill-white" id="last-open">Open TikTok</button>
+          </div>
+          <div class="tiles" id="tiles"></div>
+        </section>
+
+        <section class="card">
+          <h3 class="card-title">
+            <svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.6-3.6 3.2-5.5 6.5-5.5s5.9 1.9 6.5 5.5"/><path d="M15.5 4.8a3.3 3.3 0 0 1 0 6.4"/><path d="M18 14.8c2 .7 3.2 2.4 3.5 5.2"/></svg>
+            Around now
+          </h3>
+          <div class="people" id="people"><p class="quiet">Connecting…</p></div>
+        </section>
+      </div>
+
+      <section class="card messages">
+        <h3 class="card-title">
+          <svg viewBox="0 0 24 24"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3h11A2.5 2.5 0 0 1 20 5.5v8a2.5 2.5 0 0 1-2.5 2.5H10l-4.5 4v-4h0A2.5 2.5 0 0 1 3 13.5"/><path d="M8.5 9.5h.01M12 9.5h.01M15.5 9.5h.01"/></svg>
+          Messages
+          <span class="new" id="new-count" hidden></span>
+        </h3>
+        <ul class="convs" id="convs"><li class="quiet">Loading…</li></ul>
+      </section>
+    </div>
+
+    <footer class="actions">
+      <button class="pill" id="appearance">
+        <svg viewBox="0 0 24 24"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></svg>
+        Appearance
+      </button>
+      <button class="pill" id="edit-apps">
+        <svg viewBox="0 0 24 24"><rect x="3.5" y="3.5" width="7" height="7" rx="2"/><rect x="13.5" y="3.5" width="7" height="7" rx="2"/><rect x="3.5" y="13.5" width="7" height="7" rx="2"/><path d="M17 14v6M14 17h6"/></svg>
+        Edit apps
+      </button>
+      <button class="pill" id="dnd" aria-pressed="false">
+        <svg viewBox="0 0 24 24"><path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5Z"/></svg>
+        <span id="dnd-label">Do not disturb</span>
+      </button>
+    </footer>
+  </main>
+  <script src="/assets/js/hub.js"></script>
+</body>
+</html>
