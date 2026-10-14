@@ -8,11 +8,19 @@
   <title>Opening…</title>
   <style>
     :root { color-scheme: dark; }
-    html, body { margin: 0; height: 100%; background: #09090a; color: #a9a9b2; font-family: -apple-system, BlinkMacSystemFont, "Inter Tight", sans-serif; }
-    main { height: 100%; display: grid; place-items: center; text-align: center; }
+    html, body { margin: 0; height: 100%; overflow: hidden; background: #09090a; color: #a9a9b2; font-family: -apple-system, BlinkMacSystemFont, "Inter Tight", sans-serif; }
+    #site { position: fixed; inset: 0; width: 100%; height: 100%; border: 0; background: #fff; visibility: hidden; }
+    #site.shown { visibility: visible; }
+    #cover { position: fixed; inset: 0; display: grid; place-items: center; text-align: center; background: #09090a; padding: 24px; }
+    #cover[hidden] { display: none; }
     .spin { width: 28px; height: 28px; margin: 0 auto 14px; border-radius: 50%; border: 3px solid rgba(255, 255, 255, 0.12); border-top-color: #f4f4f6; animation: spin 0.8s linear infinite; }
+    .spin[hidden] { display: none; }
     @keyframes spin { to { transform: rotate(360deg); } }
-    p { margin: 0; font-size: 14px; }
+    p { margin: 0; font-size: 14px; line-height: 1.5; max-width: 380px; }
+    .actions { margin-top: 18px; display: flex; gap: 10px; justify-content: center; }
+    .actions[hidden] { display: none; }
+    .actions button { font: inherit; font-size: 13px; font-weight: 600; padding: 9px 16px; border-radius: 10px; border: 1px solid rgba(255, 255, 255, 0.14); background: transparent; color: #f4f4f6; cursor: pointer; }
+    .actions button.primary { background: #f4f4f6; color: #0b0b0d; border-color: transparent; }
   </style>
   <script src="/app-config.js"></script>
   <script src="/assets/js/storage.js"></script>
@@ -20,8 +28,19 @@
 </head>
 <body>
   <!-- Opens one website through the bark proxy as a plain full-window page (no address bar).
-       Used by the bark Mac app's sidebar: /open?url=https://www.tiktok.com/ -->
-  <main><div><div class="spin"></div><p id="status">Opening privately…</p></div></main>
+       Used by the bark Mac app's sidebar: /open?url=https://www.tiktok.com/
+       The site loads in a full-window frame, the same way the Browser's tabs do, so this page stays
+       around to keep the proxy connection alive. -->
+  <iframe id="site" title="" allow="fullscreen; clipboard-read; clipboard-write; autoplay; encrypted-media; picture-in-picture; camera; microphone"
+          sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-pointer-lock allow-modals allow-orientation-lock allow-presentation allow-downloads allow-storage-access-by-user-activation"></iframe>
+  <div id="cover"><div>
+    <div class="spin" id="spin"></div>
+    <p id="status">Opening privately…</p>
+    <div class="actions" id="actions" hidden>
+      <button class="primary" id="retry">Try again</button>
+      <button id="direct">Open without the proxy</button>
+    </div>
+  </div></div>
   <script src="/assets/js/vendor.js"></script>
   <script src="/assets/ultraviolet/uv.bundle.js"></script>
   <script src="/assets/ultraviolet/uv.config.js"></script>
@@ -29,21 +48,68 @@
   <script src="/assets/scramjet/scramjet.config.js"></script>
   <script src="/assets/js/proxy.js"></script>
   <script>
-    (async () => {
+    (() => {
+      const frame = document.getElementById("site");
+      const cover = document.getElementById("cover");
+      const spin = document.getElementById("spin");
       const status = document.getElementById("status");
+      const actions = document.getElementById("actions");
       const raw = new URLSearchParams(location.search).get("url") || "";
+
+      function fail(message, canRetry = true) {
+        spin.hidden = true;
+        status.textContent = message;
+        actions.hidden = !canRetry;
+      }
+
       let target;
       try {
         target = new URL(raw);
         if (target.protocol !== "https:" && target.protocol !== "http:") throw new Error();
       } catch {
-        status.textContent = "That address can't be opened.";
-        return;
+        return fail("That address can't be opened.", false);
       }
-      document.title = target.hostname;
-      const { src } = await window.proxy.resolve(target.href);
-      // Replace this page, so Back doesn't return to the loading screen.
-      location.replace(src);
+      const host = target.hostname.replace(/^www\./, "");
+      document.title = host;
+
+      document.getElementById("retry").onclick = () => location.reload();
+      // Loads the real site in this window, without the proxy.
+      document.getElementById("direct").onclick = () => location.replace(target.href);
+
+      // Keep the window title in step with the site.
+      setInterval(() => {
+        try {
+          const t = frame.contentDocument?.title;
+          if (t) document.title = t;
+        } catch {}
+      }, 1000);
+
+      frame.addEventListener("load", () => {
+        if (!frame.src) return;
+        clearTimeout(slow);
+        frame.classList.add("shown");
+        cover.hidden = true;
+      });
+
+      // If nothing has loaded after a while, say so instead of spinning forever.
+      const slow = setTimeout(() => {
+        fail(`${host} is taking too long to load through the proxy. The bark server may be waking up, or the site may be blocking it.`);
+      }, 30000);
+
+      (async () => {
+        try {
+          if (!window.proxy) throw new Error("The proxy scripts didn't load.");
+          status.textContent = "Connecting to the bark proxy…";
+          await window.proxy.settled(15000);
+          status.textContent = `Loading ${host}…`;
+          const { src } = await window.proxy.resolve(target.href);
+          frame.src = src;
+        } catch (error) {
+          clearTimeout(slow);
+          console.error(error);
+          fail(`Couldn't open ${host}: ${error?.message || error}`);
+        }
+      })();
     })();
   </script>
 </body>
