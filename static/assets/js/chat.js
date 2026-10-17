@@ -207,9 +207,10 @@
       $("me-name").textContent = msg.me.name;
       // Open access: guests pick their own name (and can change it by clicking it).
       state.guest = msg.me.named !== undefined;
-      $("me-name").classList.toggle("editable", state.guest);
+      // Anyone can change the name others see by clicking it.
+      $("me-name").classList.add("editable");
+      $("me-name").title = "Change your display name";
       if (state.guest) {
-        $("me-name").title = "Change your name";
         $("signout").hidden = true;
       }
       if (msg.me.named === false) openNameDialog();
@@ -382,7 +383,7 @@
         return li;
       }),
     );
-    if (!people.length) dmList.append(el("li", "side-sub", "  No one else has a code yet."));
+    if (!people.length) dmList.append(el("li", "side-sub", "  No one else has joined yet."));
     updateBadge();
   }
 
@@ -549,14 +550,14 @@
         return;
       }
     }
-    call = { conv: convId, local, peers: new Map(), mic: true, cam: local.getVideoTracks().length > 0, iceServers: state.iceServers };
+    call = { conv: convId, local, peers: new Map(), mic: true, cam: local.getVideoTracks().length > 0, iceServers: state.iceServers, startedAt: Date.now() };
     if (state.current !== convId) openConv(convId);
     $("call").hidden = false;
     renderTiles();
     renderCallBar();
     renderHeader();
     wsSend({ t: "call-join", conv: convId, video: wantVideo });
-    tellApp({ type: "call", active: true });
+    reportCall();
   }
 
   function endCall(reason) {
@@ -569,8 +570,19 @@
     $("call").hidden = true;
     $("tiles").replaceChildren();
     renderHeader();
-    tellApp({ type: "call", active: false });
+    reportCall();
   }
+
+  // Tells the Mac app about the call, for its small call box in the corner.
+  function reportCall() {
+    if (!call) return tellApp({ type: "call", active: false });
+    const title = call.conv.startsWith("ch:") ? `#${convTitle(call.conv)}` : convTitle(call.conv);
+    tellApp({ type: "call", active: true, title, count: call.peers.size + 1, muted: !call.mic, startedAt: call.startedAt });
+  }
+
+  // The Mac app's call box: mute and leave without opening Messages.
+  window.barkCallMute = () => $("toggle-mic").click();
+  window.barkCallLeave = () => $("leave-call").click();
 
   function videoSender(pc) {
     return pc.getTransceivers().find(t => t.receiver.track?.kind === "video")?.sender;
@@ -700,6 +712,7 @@
       box.dataset.key = key;
     }
     $("call-label").textContent = `${call.conv.startsWith("ch:") ? `#${convTitle(call.conv)}` : convTitle(call.conv)} · ${call.peers.size + 1} in call`;
+    reportCall();
   }
 
   function renderCallBar() {
@@ -715,6 +728,7 @@
     call.mic = !call.mic;
     for (const t of call.local.getAudioTracks()) t.enabled = call.mic;
     renderCallBar();
+    reportCall();
     renderTiles();
     sendMediaState();
   });
@@ -815,22 +829,30 @@
   // ---------- choosing a name ----------
 
   function openNameDialog() {
-    $("name-input").value = state.me?.named ? state.me.name : "";
+    $("name-input").value = state.guest && !state.me?.named ? "" : state.me?.name ?? "";
+    // Signed-in people can clear the box to go back to their Google name.
+    $("name-hint").hidden = state.guest;
+    if (!state.guest && state.me?.googleName) $("name-hint").textContent = `Leave it empty to use your Google name (${state.me.googleName}).`;
     $("name-dialog").hidden = false;
     setTimeout(() => $("name-input").focus(), 0);
   }
 
+  $("name-cancel").addEventListener("click", () => {
+    $("name-dialog").hidden = true;
+  });
+  document.addEventListener("keydown", event => {
+    if (event.key === "Escape" && !$("name-dialog").hidden && !(state.guest && !state.me?.named)) $("name-dialog").hidden = true;
+  });
+
   $("name-form").addEventListener("submit", event => {
     event.preventDefault();
     const name = $("name-input").value.trim();
-    if (!name) return;
+    if (!name && state.guest) return;
     wsSend({ t: "set-name", name });
     $("name-dialog").hidden = true;
   });
 
-  $("me-name").addEventListener("click", () => {
-    if (state.guest) openNameDialog();
-  });
+  $("me-name").addEventListener("click", () => openNameDialog());
 
   // ---------- app integration ----------
 
@@ -843,6 +865,9 @@
       renderSidebar();
     }
   };
+
+  // bark → Change Your Display Name… in the Mac app.
+  window.barkChangeName = () => openNameDialog();
 
   // Clicking a notification in the Mac app opens that conversation.
   window.barkOpenConversation = convId => {

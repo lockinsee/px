@@ -88,10 +88,14 @@
 
   <div id="name-dialog" class="name-dialog" hidden>
     <form id="name-form" class="name-card" autocomplete="off">
-      <h2>What should people call you?</h2>
+      <h2>Your display name</h2>
       <p>This is the name everyone sees in Messages. You can change it any time by clicking your name.</p>
-      <input id="name-input" maxlength="32" placeholder="Your name" aria-label="Your name" />
-      <button class="pill accept" type="submit">Continue</button>
+      <input id="name-input" maxlength="32" placeholder="Your name" aria-label="Your display name" />
+      <p class="name-hint" id="name-hint" hidden></p>
+      <div class="name-actions">
+        <button class="pill" type="button" id="name-cancel">Cancel</button>
+        <button class="pill accept" type="submit">Save</button>
+      </div>
     </form>
   </div>
 

@@ -224,8 +224,10 @@ export function createAccess({ requireSignIn = true, inviteOnly = false, barkSit
     }
     if (!identity?.startsWith("google:")) return null;
     const email = identity.slice(7);
-    const name = invites?.people.get(email) || invites?.hashed.get(hashEmail(email)) || known[email]?.name || email.split("@")[0];
-    return { id: `g${sha256hex(email).slice(0, 16)}`, name };
+    // A name the person picked themselves wins, then the invite list's, then their Google name.
+    const custom = known[email]?.displayName;
+    const name = custom || invites?.people.get(email) || invites?.hashed.get(hashEmail(email)) || known[email]?.name || email.split("@")[0];
+    return { id: `g${sha256hex(email).slice(0, 16)}`, name, custom: Boolean(custom), googleName: known[email]?.name || "" };
   }
 
   function members() {
@@ -239,14 +241,11 @@ export function createAccess({ requireSignIn = true, inviteOnly = false, barkSit
         .map(([key]) => profileFor(key));
     }
     if (!inviteOnly) {
-      // Everyone who's signed in during the last month (most recent first).
-      const cutoff = Date.now() - 30 * 24 * 60 * 60 * 1000;
-      const seen = v => Math.max(v.lastSeen ?? 0, v.lastSignIn ?? 0);
-      return Object.entries(known)
-        .filter(([key, v]) => key.includes("@") && seen(v) > cutoff)
-        .sort((a, b) => seen(b[1]) - seen(a[1]))
-        .slice(0, 200)
-        .map(([email]) => profileFor(`google:${email}`));
+      // Everyone who has ever signed in.
+      return Object.keys(known)
+        .filter(key => key.includes("@"))
+        .slice(0, 2000)
+        .map(email => profileFor(`google:${email}`));
     }
     const emails = new Set([...(invites?.people.keys() ?? []), ...extraEmails].filter(e => e !== "*"));
     for (const email of Object.keys(known)) if (isInvited(email)) emails.add(email);
@@ -372,15 +371,24 @@ h1{font-size:26px;letter-spacing:-.03em;margin:0 0 10px}p{color:#a9a9b2;max-widt
     });
   }
 
-  /** Guests choose their own display name in Messages. */
+  /** Everyone can choose the name others see in Messages. Signed-in people can clear it to go
+   *  back to their Google name. */
   function setName(identity, raw) {
     const name = String(raw ?? "")
       .replace(/[\u0000-\u001f<>]/g, "")
       .replace(/\s+/g, " ")
       .trim()
       .slice(0, 32);
-    if (!name || !identity?.startsWith("guest:")) return false;
-    known[identity] = { ...known[identity], name, lastSeen: Date.now() };
+    if (identity?.startsWith("guest:")) {
+      if (!name) return false;
+      known[identity] = { ...known[identity], name, lastSeen: Date.now() };
+    } else if (identity?.startsWith("google:")) {
+      const email = identity.slice(7);
+      const { displayName, ...rest } = known[email] ?? {};
+      known[email] = name ? { ...rest, displayName: name } : rest;
+    } else {
+      return false;
+    }
     persist();
     return true;
   }

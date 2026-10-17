@@ -128,7 +128,10 @@ app.post("/filter/verdict", async (req, res) => {
 const TUNNEL_PORT = Number(process.env.TUNNEL_PORT) || 8081;
 const tunnelHost = process.env.TUNNEL_PUBLIC_HOST || process.env.RAILWAY_TCP_PROXY_DOMAIN || "";
 const tunnelPort = Number(process.env.TUNNEL_PUBLIC_PORT || process.env.RAILWAY_TCP_PROXY_PORT) || 0;
-if (access.enabled && process.env.TUNNEL !== "off") {
+if (TUNNEL_PORT === PORT) {
+  // Both on one port would crash the server, so the website wins and the tunnel stays off.
+  console.log(chalk.red(`⚠️  The tunnel and the website both want port ${PORT}. Set PORT=8080 in Railway's Variables so the tunnel can use ${TUNNEL_PORT}.`));
+} else if (access.enabled && process.env.TUNNEL !== "off") {
   startTunnel({ port: TUNNEL_PORT, readKey: access.readTunnelKey, allowPrivate, log: msg => console.log(chalk.green(`🔐 ${msg}`)) });
   if (!tunnelHost || !tunnelPort) console.log(chalk.yellow("⚠️  The Mac app's tunnel has no public address yet: add a TCP Proxy for port 8081 in Railway (Settings → Networking)."));
 }

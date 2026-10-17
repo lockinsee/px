@@ -704,3 +704,9 @@ body.chat {
     display: none;
   }
 }
+
+/* display name dialog: hint and Cancel / Save */
+.name-card .name-hint { margin: -6px 0 14px; font-size: 13px; color: var(--ink3, #6b6b74); }
+.name-actions { display: flex; gap: 10px; }
+.name-actions .pill { flex: 1; width: auto; }
+.me-name.editable::after { content: "✎"; margin-left: 6px; opacity: 0.45; font-size: 0.9em; }

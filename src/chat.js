@@ -263,7 +263,7 @@ export function createChat({ access, channels, iceServers, dataDir, log = consol
         return;
       }
       case "set-name": {
-        // Guests (open access) choose their own display name.
+        // Everyone can change the name others see.
         if (!access.setName?.(client.identity, msg.name)) return send(client, { t: "error", message: "Pick a name between 1 and 32 characters." });
         const updated = access.profileFor(client.identity);
         for (const c of clients) {
