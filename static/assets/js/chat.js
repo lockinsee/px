@@ -60,7 +60,28 @@
   function avatar(id) {
     const node = el("span", "avatar", nameOf(id).slice(0, 1));
     node.style.setProperty("--avatar", colorFor(id));
+    const pic = (id === state.me?.id ? state.me?.avatar : null) || state.users.get(id)?.avatar;
+    if (pic) {
+      // Their profile picture, with the initial underneath until it loads.
+      const img = el("img", "avatar-img");
+      img.src = pic;
+      img.alt = "";
+      img.onerror = () => img.remove();
+      node.classList.add("has-img");
+      node.append(img);
+    }
     return node;
+  }
+
+  // Ignores repeat clicks for a moment, so double-clicks can't start two calls or send twice.
+  function calm(fn, ms = 700) {
+    let last = 0;
+    return (...args) => {
+      const now = Date.now();
+      if (now - last < ms) return;
+      last = now;
+      return fn(...args);
+    };
   }
 
   function dmFor(otherId) {
@@ -226,6 +247,8 @@
     },
     me(msg) {
       state.me = msg.me;
+      // Use the new name right away (the member list catches up a moment later).
+      if (state.users.has(msg.me.id)) state.users.set(msg.me.id, { ...state.users.get(msg.me.id), name: msg.me.name });
       $("me-name").textContent = msg.me.name;
       $("me-avatar").replaceWith(Object.assign(avatar(msg.me.id), { id: "me-avatar" }));
       renderSidebar();
@@ -252,7 +275,7 @@
       }
       if (msg.msg.from !== state.me.id && !viewing) {
         const where = msg.conv.startsWith("ch:") ? `#${convTitle(msg.conv)}` : "";
-        tellApp({ type: "notify", title: where ? `${nameOf(msg.msg.from)} in ${where}` : nameOf(msg.msg.from), body: msg.msg.text.slice(0, 200), conv: msg.conv });
+        tellApp({ type: "notify", title: where ? `${nameOf(msg.msg.from)} in ${where}` : nameOf(msg.msg.from), body: (msg.msg.text || "Sent a photo").slice(0, 200), conv: msg.conv });
       }
       renderSidebar();
       renderTyping();
@@ -407,8 +430,17 @@
     $("text").placeholder = isDm ? `Message ${convTitle(convId)}` : `Message #${convTitle(convId)}`;
   }
 
+  // Messages already on screen, so only genuinely new ones animate in.
+  const shown = new Set();
+  let shownConv = null;
+
   function renderMessages(stickToBottom) {
     const box = $("messages");
+    const freshConv = shownConv !== state.current;
+    if (freshConv) {
+      shown.clear();
+      shownConv = state.current;
+    }
     const atBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 80;
     const entry = conv(state.current);
     const nodes = [];
@@ -454,8 +486,14 @@
       }
       group.lastAt = m.at;
       const line = el("div", m.pending ? "msg pending" : "msg");
+      // Slide in messages that just arrived (yours when you send it, not again when it's confirmed).
+      const mine = m.from === state.me.id;
+      if (!freshConv && !shown.has(m.id) && (m.pending || !mine)) line.classList.add("enter");
+      shown.add(m.id);
       line.title = timeFmt.format(m.at);
-      line.append(linkify(m.text));
+      if (m.image) line.append(photo(m));
+      if (m.uploading) line.append(el("span", "uploading", "Sending photo…"));
+      if (m.text) line.append(linkify(m.text));
       if (m.from === state.me.id && !m.pending) {
         const del = el("button", "delete", "Delete");
         del.type = "button";
@@ -479,6 +517,13 @@
 
   function openConv(convId, initial = false) {
     if (!convId) return;
+    if (state.current !== convId && !initial) {
+      // A soft fade when switching conversations.
+      const box = $("messages");
+      box.classList.remove("switching");
+      void box.offsetWidth;
+      box.classList.add("switching");
+    }
     state.current = convId;
     storageSet("chat.current", convId);
     const entry = conv(convId);
@@ -516,10 +561,13 @@
     }
   });
 
+  let lastSent = { text: "", at: 0 };
   $("composer").addEventListener("submit", event => {
     event.preventDefault();
     const value = text.value.trim();
     if (!value || !state.me) return;
+    if (value === lastSent.text && Date.now() - lastSent.at < 400) return; // a double press
+    lastSent = { text: value, at: Date.now() };
     const nonce = Math.random().toString(36).slice(2);
     const entry = conv(state.current);
     entry.msgs.push({ id: `pending-${nonce}`, nonce, from: state.me.id, text: value, at: Date.now(), pending: true });
@@ -530,11 +578,127 @@
     lastTypingSent = 0;
   });
 
+  // ---------- photos ----------
+
+  function photo(m) {
+    const img = el("img", "msg-image");
+    img.src = m.image;
+    img.alt = "Photo";
+    img.loading = "lazy";
+    if (m.w && m.h) {
+      // Reserve the space before it loads, so the conversation doesn't jump.
+      const scale = Math.min(1, 320 / m.w, 320 / m.h);
+      img.width = Math.round(m.w * scale);
+      img.height = Math.round(m.h * scale);
+    }
+    img.addEventListener("click", () => {
+      $("viewer-img").src = m.image;
+      $("viewer").hidden = false;
+    });
+    return img;
+  }
+  $("viewer").addEventListener("click", () => {
+    $("viewer").hidden = true;
+  });
+  document.addEventListener("keydown", event => {
+    if (event.key === "Escape") $("viewer").hidden = true;
+  });
+
+  // Big photos are shrunk to at most 1600px before sending; GIFs are sent as they are.
+  function shrink(file) {
+    return new Promise((resolve, reject) => {
+      const url = URL.createObjectURL(file);
+      const img = new Image();
+      img.onload = () => {
+        URL.revokeObjectURL(url);
+        const w = img.naturalWidth, h = img.naturalHeight;
+        if (file.type === "image/gif" || (Math.max(w, h) <= 1600 && file.size < 1_500_000 && file.type !== "image/heic")) {
+          return resolve({ blob: file, w, h });
+        }
+        const scale = Math.min(1, 1600 / Math.max(w, h));
+        const canvas = document.createElement("canvas");
+        canvas.width = Math.round(w * scale);
+        canvas.height = Math.round(h * scale);
+        canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
+        canvas.toBlob(blob => (blob ? resolve({ blob, w: canvas.width, h: canvas.height }) : reject(new Error("couldn't read the image"))), "image/jpeg", 0.85);
+      };
+      img.onerror = () => {
+        URL.revokeObjectURL(url);
+        reject(new Error("That file isn't an image bark can send."));
+      };
+      img.src = url;
+    });
+  }
+
+  async function sendPhoto(file) {
+    if (!state.me || !state.current) return;
+    if (!file.type.startsWith("image/")) return banner("Only photos and GIFs can be sent.");
+    if (file.size > 40 * 1024 * 1024) return banner("That file is too big to send.");
+    const convId = state.current;
+    const nonce = Math.random().toString(36).slice(2);
+    const entry = conv(convId);
+    const pending = { id: `pending-${nonce}`, nonce, from: state.me.id, text: "", at: Date.now(), pending: true, uploading: true };
+    entry.msgs.push(pending);
+    renderMessages(true);
+    try {
+      const { blob, w, h } = await shrink(file);
+      if (blob.size > 8 * 1024 * 1024) throw new Error("That photo is too big (8 MB max).");
+      const response = await fetch("/chat/upload", { method: "POST", headers: { "content-type": blob.type || "image/jpeg" }, body: blob });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok || !result.url) throw new Error(result.error || "Couldn't send the photo.");
+      pending.uploading = false;
+      pending.image = result.url;
+      Object.assign(pending, { w, h });
+      wsSend({ t: "send", conv: convId, text: "", image: result.url, w, h, nonce });
+    } catch (error) {
+      entry.msgs.splice(entry.msgs.indexOf(pending), 1);
+      banner(error.message || "Couldn't send the photo.", 6000);
+    }
+    renderMessages(true);
+  }
+
+  $("attach").addEventListener("click", calm(() => $("photo-input").click(), 800));
+  $("photo-input").addEventListener("change", () => {
+    for (const file of [...$("photo-input").files].slice(0, 10)) sendPhoto(file);
+    $("photo-input").value = "";
+  });
+  // Paste a screenshot or copied image straight into the message box.
+  $("text").addEventListener("paste", event => {
+    const files = [...(event.clipboardData?.files ?? [])].filter(f => f.type.startsWith("image/"));
+    if (!files.length) return;
+    event.preventDefault();
+    for (const file of files.slice(0, 10)) sendPhoto(file);
+  });
+  // Drag photos onto the conversation.
+  $("messages").addEventListener("dragover", event => {
+    if ([...event.dataTransfer.items].some(i => i.kind === "file")) {
+      event.preventDefault();
+      $("messages").classList.add("drop");
+    }
+  });
+  $("messages").addEventListener("dragleave", () => $("messages").classList.remove("drop"));
+  $("messages").addEventListener("drop", event => {
+    event.preventDefault();
+    $("messages").classList.remove("drop");
+    for (const file of [...event.dataTransfer.files].slice(0, 10)) sendPhoto(file);
+  });
+
   // ---------- calls ----------
 
   let call = null; // { conv, local: MediaStream, peers: Map(id -> {pc, stream, pending, audio, video}), mic, cam }
 
+  let starting = false;
   async function startCall(convId, wantVideo) {
+    if (starting) return; // already asking for the camera/mic
+    starting = true;
+    try {
+      await reallyStartCall(convId, wantVideo);
+    } finally {
+      starting = false;
+    }
+  }
+
+  async function reallyStartCall(convId, wantVideo) {
     if (call) endCall("switch");
     stopRing();
     let local;
@@ -575,10 +739,67 @@
 
   // Tells the Mac app about the call, for its small call box in the corner.
   function reportCall() {
-    if (!call) return tellApp({ type: "call", active: false });
+    if (!call) {
+      window.barkWantFrames(false);
+      return tellApp({ type: "call", active: false });
+    }
     const title = call.conv.startsWith("ch:") ? `#${convTitle(call.conv)}` : convTitle(call.conv);
     tellApp({ type: "call", active: true, title, count: call.peers.size + 1, muted: !call.mic, startedAt: call.startedAt });
   }
+
+  // The Mac app's floating call window shows everyone's faces: small snapshots of each video,
+  // a few times a second, only while that window is showing.
+  let frameTimer = null;
+  const snapCanvas = document.createElement("canvas");
+  snapCanvas.width = 240;
+  snapCanvas.height = 180;
+  function sendFrames() {
+    if (!call) return;
+    const ctx = snapCanvas.getContext("2d");
+    const people = [...document.querySelectorAll("#tiles .tile")].map(node => {
+      const id = node.dataset.id;
+      const isMe = node.classList.contains("me");
+      const video = node.querySelector("video");
+      let image = null;
+      if (node.classList.contains("has-video") && video && video.videoWidth > 0) {
+        // Crop to fill the 4:3 snapshot, and mirror yourself like the call screen does.
+        const scale = Math.max(snapCanvas.width / video.videoWidth, snapCanvas.height / video.videoHeight);
+        const w = video.videoWidth * scale, h = video.videoHeight * scale;
+        ctx.save();
+        if (isMe) { ctx.translate(snapCanvas.width, 0); ctx.scale(-1, 1); }
+        ctx.drawImage(video, (snapCanvas.width - w) / 2, (snapCanvas.height - h) / 2, w, h);
+        ctx.restore();
+        try { image = snapCanvas.toDataURL("image/jpeg", 0.6); } catch { image = null; }
+      } else {
+        // Camera off: show their profile picture instead, if they have one.
+        const pic = node.querySelector(".tile-avatar .avatar-img");
+        if (pic && pic.complete && pic.naturalWidth) {
+          const side = Math.min(pic.naturalWidth, pic.naturalHeight);
+          ctx.fillStyle = "#1c1c1f";
+          ctx.fillRect(0, 0, snapCanvas.width, snapCanvas.height);
+          const size = snapCanvas.height * 0.62;
+          ctx.save();
+          ctx.beginPath();
+          ctx.arc(snapCanvas.width / 2, snapCanvas.height / 2, size / 2, 0, Math.PI * 2);
+          ctx.clip();
+          ctx.drawImage(pic, (pic.naturalWidth - side) / 2, (pic.naturalHeight - side) / 2, side, side,
+            (snapCanvas.width - size) / 2, (snapCanvas.height - size) / 2, size, size);
+          ctx.restore();
+          try { image = snapCanvas.toDataURL("image/jpeg", 0.6); } catch { image = null; }
+        }
+      }
+      return { id, name: isMe ? "You" : nameOf(id), me: isMe, muted: node.dataset.audio === "0", image };
+    });
+    tellApp({ type: "call-frames", people });
+  }
+  window.barkWantFrames = on => {
+    clearInterval(frameTimer);
+    frameTimer = null;
+    if (on && call) {
+      sendFrames();
+      frameTimer = setInterval(sendFrames, 350);
+    }
+  };
 
   // The Mac app's call box: mute and leave without opening Messages.
   window.barkCallMute = () => $("toggle-mic").click();
@@ -682,6 +903,8 @@
 
   function tile(id, stream, isMe, hasVideo, audioOn, status) {
     const node = el("div", `tile${isMe ? " me" : ""}${hasVideo ? " has-video" : ""}`);
+    node.dataset.id = id;
+    node.dataset.audio = audioOn ? "1" : "0";
     const video = el("video");
     video.autoplay = true;
     video.playsInline = true;
@@ -760,10 +983,10 @@
     sendMediaState();
   });
 
-  $("leave-call").addEventListener("click", () => endCall("left"));
-  $("start-voice").addEventListener("click", () => startCall(state.current, false));
-  $("start-video").addEventListener("click", () => startCall(state.current, true));
-  $("join-call").addEventListener("click", () => startCall(state.current, false));
+  $("leave-call").addEventListener("click", calm(() => endCall("left")));
+  $("start-voice").addEventListener("click", calm(() => startCall(state.current, false), 1500));
+  $("start-video").addEventListener("click", calm(() => startCall(state.current, true), 1500));
+  $("join-call").addEventListener("click", calm(() => startCall(state.current, false), 1500));
 
   // ---------- incoming calls ----------
 
@@ -815,11 +1038,11 @@
     } catch {}
   }
 
-  $("ring-join").addEventListener("click", () => {
+  $("ring-join").addEventListener("click", calm(() => {
     const msg = ringing;
     stopRing();
     if (msg) startCall(msg.conv, msg.video);
-  });
+  }, 1500));
 
   $("ring-decline").addEventListener("click", () => {
     if (ringing) wsSend({ t: "decline", conv: ringing.conv });
@@ -828,7 +1051,74 @@
 
   // ---------- choosing a name ----------
 
+  // ---------- profile picture ----------
+
+  function renderProfilePhoto() {
+    const box = $("profile-photo");
+    box.replaceChildren(state.me ? avatar(state.me.id) : el("span"));
+    $("photo-remove").hidden = !state.me?.avatar;
+  }
+
+  // Crops to a centred square and shrinks to 256px, so pictures are tiny and quick.
+  function squareAvatar(file) {
+    return new Promise((resolve, reject) => {
+      const url = URL.createObjectURL(file);
+      const img = new Image();
+      img.onload = () => {
+        URL.revokeObjectURL(url);
+        const side = Math.min(img.naturalWidth, img.naturalHeight);
+        const canvas = document.createElement("canvas");
+        canvas.width = canvas.height = 256;
+        canvas.getContext("2d").drawImage(img, (img.naturalWidth - side) / 2, (img.naturalHeight - side) / 2, side, side, 0, 0, 256, 256);
+        canvas.toBlob(b => (b ? resolve(b) : reject(new Error("Couldn't read that picture."))), "image/jpeg", 0.88);
+      };
+      img.onerror = () => {
+        URL.revokeObjectURL(url);
+        reject(new Error("That file isn't a picture bark can use."));
+      };
+      img.src = url;
+    });
+  }
+
+  let photoBusy = false;
+  async function changePhoto(file) {
+    if (photoBusy || !file) return;
+    if (file.size > 40 * 1024 * 1024) return banner("That picture is too big.");
+    photoBusy = true;
+    $("photo-change").disabled = true;
+    try {
+      const blob = await squareAvatar(file);
+      const response = await fetch("/chat/avatar", { method: "POST", headers: { "content-type": "image/jpeg" }, body: blob });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.error || "Couldn't save the picture.");
+      state.me = { ...state.me, avatar: result.avatar };
+      renderProfilePhoto();
+    } catch (error) {
+      banner(error.message || "Couldn't save the picture.", 6000);
+    } finally {
+      photoBusy = false;
+      $("photo-change").disabled = false;
+    }
+  }
+
+  $("photo-change").addEventListener("click", calm(() => $("avatar-input").click(), 800));
+  $("avatar-input").addEventListener("change", () => {
+    changePhoto($("avatar-input").files[0]);
+    $("avatar-input").value = "";
+  });
+  $("photo-remove").addEventListener("click", calm(async () => {
+    const response = await fetch("/chat/avatar", { method: "DELETE" }).catch(() => null);
+    if (!response?.ok) return banner("Couldn't remove the picture.");
+    state.me = { ...state.me, avatar: null };
+    renderProfilePhoto();
+  }));
+  // Clicking your own picture opens your profile too.
+  document.addEventListener("click", event => {
+    if (event.target.closest?.("#me-avatar")) openNameDialog();
+  });
+
   function openNameDialog() {
+    renderProfilePhoto();
     $("name-input").value = state.guest && !state.me?.named ? "" : state.me?.name ?? "";
     // Signed-in people can clear the box to go back to their Google name.
     $("name-hint").hidden = state.guest;

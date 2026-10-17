@@ -710,3 +710,74 @@ body.chat {
 .name-actions { display: flex; gap: 10px; }
 .name-actions .pill { flex: 1; width: auto; }
 .me-name.editable::after { content: "✎"; margin-left: 6px; opacity: 0.45; font-size: 0.9em; }
+
+/* ---------- photos ---------- */
+.composer { padding-left: 8px; }
+.composer .attach {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--muted, #a1a1aa);
+  cursor: pointer;
+}
+.composer .attach:hover { background: rgba(255, 255, 255, 0.06); color: var(--text, #fff); }
+.msg-image {
+  display: block;
+  max-width: min(320px, 100%);
+  height: auto;
+  margin: 4px 0;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.04);
+  cursor: zoom-in;
+  object-fit: cover;
+}
+.msg .uploading { color: var(--muted, #a1a1aa); font-size: 13px; font-style: italic; }
+.messages.drop { outline: 2px dashed var(--border-2); outline-offset: -10px; }
+.viewer {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: grid;
+  place-items: center;
+  padding: 32px;
+  background: rgba(0, 0, 0, 0.85);
+  cursor: zoom-out;
+}
+.viewer img { max-width: 100%; max-height: 100%; border-radius: 10px; box-shadow: 0 30px 80px rgba(0, 0, 0, 0.6); }
+
+/* ---------- motion ---------- */
+@media (prefers-reduced-motion: no-preference) {
+  .msg.enter { animation: msg-in 0.32s cubic-bezier(0.2, 0.9, 0.25, 1) both; }
+  .messages.switching { animation: switch-in 0.22s ease-out both; }
+  .msg-image { transition: transform 0.2s ease, box-shadow 0.2s ease; }
+  .msg-image:hover { transform: scale(1.01); box-shadow: 0 10px 30px -12px rgba(0, 0, 0, 0.6); }
+  .viewer:not([hidden]) { animation: fade-in 0.2s ease-out; }
+  .viewer:not([hidden]) img { animation: pop-in 0.28s cubic-bezier(0.2, 0.9, 0.25, 1); }
+  .side button, .side a, .composer .send, .composer .attach, .icon-btn, .pill { transition: background-color 0.18s ease, color 0.18s ease, transform 0.15s ease, opacity 0.18s ease; }
+  .composer .send:active, .icon-btn:active, .pill:active { transform: scale(0.96); }
+  .ring:not([hidden]) { animation: pop-in 0.3s cubic-bezier(0.2, 0.9, 0.25, 1); }
+  .call:not([hidden]) { animation: fade-in 0.25s ease-out; }
+  .tile { animation: fade-in 0.3s ease-out; }
+  .name-dialog:not([hidden]) .name-card { animation: pop-in 0.28s cubic-bezier(0.2, 0.9, 0.25, 1); }
+}
+@keyframes msg-in { from { opacity: 0; transform: translateY(8px); } }
+@keyframes switch-in { from { opacity: 0.35; transform: translateY(4px); } }
+@keyframes fade-in { from { opacity: 0; } }
+@keyframes pop-in { from { opacity: 0; transform: scale(0.96); } }
+
+/* ---------- profile pictures ---------- */
+.chat .avatar { position: relative; overflow: hidden; }
+.chat .avatar .avatar-img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; border-radius: inherit; }
+#me-avatar { cursor: pointer; }
+.profile-row { display: flex; align-items: center; gap: 16px; margin: 4px 0 14px; }
+.profile-photo .avatar { width: 72px; height: 72px; border-radius: 22px; font-size: 28px; }
+.profile-photo-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.profile-photo-actions .pill { height: 34px; padding: 0 14px; font-size: 13px; width: auto; }
+.profile-photo-actions .pill.quiet { background: transparent; border-color: var(--border); color: var(--muted); }
+.tile-avatar .avatar { width: 72px; height: 72px; border-radius: 50%; font-size: 26px; }

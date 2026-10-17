@@ -43,6 +43,8 @@
       '<svg viewBox="0 0 24 24"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3h11A2.5 2.5 0 0 1 20 5.5v8a2.5 2.5 0 0 1-2.5 2.5H10l-4.5 4v-4A2.5 2.5 0 0 1 3 13.5"/><path d="M8.5 9.5h.01M12 9.5h.01M15.5 9.5h.01"/></svg>',
     browser:
       '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.6 3.8 5.6 3.8 9s-1.3 6.4-3.8 9c-2.5-2.6-3.8-5.6-3.8-9S9.5 5.6 12 3Z"/></svg>',
+    games:
+      '<svg viewBox="0 0 24 24"><path d="M7 8h10a5 5 0 0 1 4.6 7l-.7 1.6a2.4 2.4 0 0 1-4 .5L15 15H9l-1.9 2.1a2.4 2.4 0 0 1-4-.5L2.4 15A5 5 0 0 1 7 8Z"/><path d="M8 10.5v3M6.5 12h3"/><path d="M15.5 11.5h.01M17.5 12.5h.01"/></svg>',
     moon: '<svg viewBox="0 0 24 24"><path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5Z"/></svg>',
   };
 
@@ -100,13 +102,15 @@
     return img;
   }
 
-  function openApp(app) {
+  const openApp = calm(app => reallyOpenApp(app));
+  function reallyOpenApp(app) {
     if (!app) return;
     if (app.id !== "messages" && app.id !== "browser") {
       state.last = app.id;
       store.set("home.last", app.id);
     }
     if (bridge) return tellApp({ type: "open", app: app.id });
+    if (!app.url && app.id !== "messages" && app.id !== "browser") return;
     if (app.id === "messages") location.href = "/chat";
     else if (app.id === "browser") location.href = "/browse";
     else location.href = `/open?url=${encodeURIComponent(app.url)}`;
@@ -140,7 +144,26 @@
 
   function avatar(id, small = false) {
     const node = el("span", small ? "avatar small" : "avatar", nameOf(id).slice(0, 1).toUpperCase());
+    const pic = (id === state.me?.id ? state.me?.avatar : null) || state.users.get(id)?.avatar;
+    if (pic) {
+      const img = el("img", "avatar-img");
+      img.src = pic;
+      img.alt = "";
+      img.onerror = () => img.remove();
+      node.append(img);
+    }
     return node;
+  }
+
+  // Ignores repeat clicks for a moment, so a double-click doesn't open things twice.
+  function calm(fn, ms = 600) {
+    let last = 0;
+    return (...args) => {
+      const now = Date.now();
+      if (now - last < ms) return;
+      last = now;
+      return fn(...args);
+    };
   }
 
   function dmWith(otherId) {
@@ -202,6 +225,8 @@
     return msgs.filter(m => m.at > read && m.from !== state.me.id).length;
   }
 
+  let topSeen = null; // the newest message shown, so a new arrival can glow once
+
   function renderConvs() {
     if (!state.me) return;
     const list = [...state.convs.entries()]
@@ -213,7 +238,8 @@
       const count = unread(conv, msgs);
       const isDm = conv.startsWith("dm:");
       const who = lastMsg.from === state.me.id ? "You" : nameOf(lastMsg.from).split(/\s+/)[0];
-      const preview = isDm && lastMsg.from !== state.me.id ? lastMsg.text : `${who}: ${lastMsg.text}`;
+      const body = lastMsg.text || (lastMsg.image ? "📷 Photo" : "");
+      const preview = isDm && lastMsg.from !== state.me.id ? body : `${who}: ${body}`;
       const row = el("button", count ? "conv unread" : "conv");
       const pic = isDm ? avatar(conv.split(":").find(p => p !== "dm" && p !== state.me.id), true) : el("span", "avatar small", "#");
       const text = el("span", "conv-text");
@@ -225,6 +251,9 @@
       return li;
     });
     for (const [conv, msgs] of list) totalNew += unread(conv, msgs);
+    const top = list[0]?.[1].at(-1)?.id ?? null;
+    if (topSeen && top && top !== topSeen) rows[0]?.firstChild?.classList.add("fresh");
+    topSeen = top;
     if (!rows.length) rows.push(el("li", "quiet", "No messages yet. Say hi in #general."));
     $("convs").replaceChildren(...rows);
     $("new-count").hidden = !totalNew;
@@ -295,13 +324,13 @@
     $("dnd-label").textContent = state.dnd ? "Do not disturb is on" : "Do not disturb";
   }
 
-  $("dnd").onclick = () => {
+  $("dnd").onclick = calm(() => {
     state.dnd = !state.dnd;
     store.set("home.dnd", state.dnd);
     wsSend({ t: "set-status", dnd: state.dnd });
     tellApp({ type: "dnd", on: state.dnd });
     renderDnd();
-  };
+  });
 
   $("compose").onclick = () => {
     if (bridge) tellApp({ type: "open", app: "messages" });
@@ -319,7 +348,43 @@
     $("edit-apps").hidden = true;
   }
 
+  // ---------- update banner (the Mac app tells us about new versions) ----------
+  let update = null;
+  function renderUpdate() {
+    const box = $("update");
+    if (!update || !bridge) {
+      if (!box.hidden) {
+        box.classList.add("leaving");
+        setTimeout(() => { box.hidden = true; box.classList.remove("leaving"); }, 220);
+      }
+      return;
+    }
+    const busy = update.stage === "downloading" || update.stage === "installing";
+    const pct = Math.round(Math.max(0, Math.min(1, Number(update.progress) || 0)) * 100);
+    $("update-title").textContent =
+      update.stage === "downloading" ? `Downloading bark ${update.version}…` :
+      update.stage === "installing" ? "Installing… bark will reopen in a moment" :
+      update.stage === "failed" ? "The update didn't work" :
+      `bark ${update.version} is available`;
+    $("update-sub").textContent =
+      update.stage === "failed" ? update.problem || "Try again in a bit." :
+      busy ? (update.stage === "downloading" ? `${pct}%` : "Hang tight.") :
+      update.notes ? update.notes : `You have ${update.current}. Updating takes a few seconds and keeps you signed in.`;
+    $("update-bar").hidden = !busy;
+    $("update-fill").style.width = `${update.stage === "installing" ? 100 : pct}%`;
+    $("update-go").textContent = update.stage === "failed" ? "Try again" : "Update now";
+    $("update-go").disabled = busy;
+    $("update-later").hidden = busy;
+    $("update-go").hidden = busy;
+    box.classList.toggle("busy", busy);
+    box.classList.toggle("failed", update.stage === "failed");
+    box.hidden = false;
+  }
+  $("update-go").onclick = calm(() => tellApp({ type: "update-install" }), 1500);
+  $("update-later").onclick = calm(() => tellApp({ type: "update-later" }), 800);
+
   function renderAll() {
+    renderUpdate();
     renderHeader();
     renderApps();
     renderPeople();
@@ -332,6 +397,7 @@
   window.barkHome = info => {
     if (Array.isArray(info?.apps) && info.apps.length) state.apps = info.apps;
     if (typeof info?.last === "string" && info.last) state.last = info.last;
+    if (info && "update" in info) update = info.update && typeof info.update.version === "string" ? info.update : null;
     if (typeof info?.dnd === "boolean" && info.dnd !== state.dnd) {
       state.dnd = info.dnd;
       store.set("home.dnd", state.dnd);

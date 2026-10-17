@@ -22,6 +22,22 @@
       </button>
     </header>
 
+    <!-- Shown by the bark Mac app when a newer version is on the website. -->
+    <section class="update" id="update" hidden aria-live="polite">
+      <div class="update-icon">
+        <svg viewBox="0 0 24 24"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>
+      </div>
+      <div class="update-text">
+        <p class="update-title" id="update-title">Update available</p>
+        <p class="update-sub" id="update-sub"></p>
+        <div class="update-bar" id="update-bar" hidden><span id="update-fill"></span></div>
+      </div>
+      <div class="update-actions">
+        <button class="update-later" id="update-later" type="button">Later</button>
+        <button class="pill-white update-go" id="update-go" type="button">Update now</button>
+      </div>
+    </section>
+
     <div class="grid">
       <div class="col">
         <section class="card launch">
@@ -58,7 +74,7 @@
     <footer class="actions">
       <button class="pill" id="appearance">
         <svg viewBox="0 0 24 24"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></svg>
-        Appearance
+        Settings
       </button>
       <button class="pill" id="edit-apps">
         <svg viewBox="0 0 24 24"><rect x="3.5" y="3.5" width="7" height="7" rx="2"/><rect x="13.5" y="3.5" width="7" height="7" rx="2"/><rect x="3.5" y="13.5" width="7" height="7" rx="2"/><path d="M17 14v6M14 17h6"/></svg>

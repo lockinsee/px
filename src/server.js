@@ -1,4 +1,6 @@
 import "dotenv/config";
+import crypto from "node:crypto";
+import fs from "node:fs";
 import http from "node:http";
 import { createRequire } from "node:module";
 import path from "node:path";
@@ -143,6 +145,102 @@ app.get("/auth/tunnel", (req, res) => {
   res.json({ available: true, host: tunnelHost, port: tunnelPort, username: "bark", password: access.tunnelKey(identity) });
 });
 
+// Photos in Messages. Only real JPEG/PNG/GIF/WebP files (checked by their first bytes), up to 8 MB,
+// saved under DATA_DIR/uploads with unguessable names. Only signed-in people can upload or view them.
+const UPLOADS = path.join(DATA_DIR, "uploads");
+const imageKind = buf => {
+  if (buf.length > 3 && buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff) return "jpg";
+  if (buf.length > 8 && buf.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) return "png";
+  if (buf.length > 6 && (buf.subarray(0, 6).toString("latin1") === "GIF87a" || buf.subarray(0, 6).toString("latin1") === "GIF89a")) return "gif";
+  if (buf.length > 12 && buf.subarray(0, 4).toString("latin1") === "RIFF" && buf.subarray(8, 12).toString("latin1") === "WEBP") return "webp";
+  return null;
+};
+// Limits so nobody can fill the server's disk: a total cap on stored photos (UPLOAD_CAP_MB,
+// default 2000 MB) and a per-person limit on how many they upload in a short time.
+const UPLOAD_CAP = (Number(process.env.UPLOAD_CAP_MB) || 2000) * 1024 * 1024;
+let uploadedBytes = 0;
+fs.promises
+  .readdir(path.join(DATA_DIR, "uploads"))
+  .then(async names => {
+    for (const n of names) uploadedBytes += (await fs.promises.stat(path.join(DATA_DIR, "uploads", n)).catch(() => ({ size: 0 }))).size;
+  })
+  .catch(() => {});
+const recentUploads = new Map(); // identity -> upload times in the last 10 minutes
+function allowUpload(identity, max = 40) {
+  const now = Date.now();
+  const times = (recentUploads.get(identity) ?? []).filter(t => now - t < 10 * 60_000);
+  if (times.length >= max) return false;
+  times.push(now);
+  recentUploads.set(identity, times);
+  if (recentUploads.size > 5000) recentUploads.clear();
+  return true;
+}
+
+app.post("/chat/upload", express.raw({ type: "image/*", limit: "8mb" }), async (req, res) => {
+  const body = Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0);
+  const kind = imageKind(body);
+  if (!kind) return res.status(415).json({ error: "Only JPEG, PNG, GIF or WebP images can be sent." });
+  if (!allowUpload(access.identify(req))) return res.status(429).json({ error: "You're sending photos very fast. Wait a few minutes and try again." });
+  if (uploadedBytes + body.length > UPLOAD_CAP) return res.status(507).json({ error: "The bark server is out of space for photos right now." });
+  try {
+    await fs.promises.mkdir(UPLOADS, { recursive: true });
+    const name = `${crypto.randomBytes(16).toString("hex")}.${kind}`;
+    await fs.promises.writeFile(path.join(UPLOADS, name), body);
+    uploadedBytes += body.length;
+    res.json({ url: `/chat/files/${name}` });
+  } catch (error) {
+    console.error("Couldn't save an upload:", error.message);
+    res.status(500).json({ error: "Couldn't save the image." });
+  }
+});
+app.get("/chat/files/:name", (req, res) => {
+  if (!/^[a-f0-9]{32}\.(jpg|png|gif|webp)$/.test(req.params.name)) return res.status(404).end();
+  res.set("Cache-Control", "private, max-age=31536000, immutable");
+  res.set("X-Content-Type-Options", "nosniff");
+  res.sendFile(path.join(UPLOADS, req.params.name), err => {
+    if (err && !res.headersSent) res.status(404).end();
+  });
+});
+
+// Profile pictures: small square images (the app shrinks them to 256px before sending),
+// at most 1 MB, one per person; a new one replaces the old.
+const AVATARS = path.join(DATA_DIR, "avatars");
+app.post("/chat/avatar", express.raw({ type: "image/*", limit: "1mb" }), async (req, res) => {
+  const identity = access.identify(req);
+  const body = Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0);
+  const kind = imageKind(body);
+  if (!kind || kind === "gif") return res.status(415).json({ error: "Use a JPEG, PNG or WebP picture." });
+  if (!allowUpload(`avatar:${identity}`, 20)) return res.status(429).json({ error: "You've changed your picture a lot. Try again in a few minutes." });
+  try {
+    await fs.promises.mkdir(AVATARS, { recursive: true });
+    const id = access.profileFor(identity)?.id ?? "x";
+    const name = `${id}-${crypto.randomBytes(6).toString("hex")}.${kind}`;
+    await fs.promises.writeFile(path.join(AVATARS, name), body);
+    const old = access.setAvatar(identity, name);
+    if (old && old !== name) fs.promises.unlink(path.join(AVATARS, old)).catch(() => {});
+    chat?.refreshProfile(identity);
+    res.json({ avatar: `/chat/avatars/${name}` });
+  } catch (error) {
+    console.error("Couldn't save a profile picture:", error.message);
+    res.status(500).json({ error: "Couldn't save the picture." });
+  }
+});
+app.delete("/chat/avatar", (req, res) => {
+  const identity = access.identify(req);
+  const old = access.setAvatar(identity, null);
+  if (old) fs.promises.unlink(path.join(AVATARS, old)).catch(() => {});
+  chat?.refreshProfile(identity);
+  res.json({ avatar: null });
+});
+app.get("/chat/avatars/:name", (req, res) => {
+  if (!/^[a-z0-9]+-[a-f0-9]{12}\.(jpg|png|webp)$/.test(req.params.name)) return res.status(404).end();
+  res.set("Cache-Control", "private, max-age=31536000, immutable");
+  res.set("X-Content-Type-Options", "nosniff");
+  res.sendFile(path.join(AVATARS, req.params.name), err => {
+    if (err && !res.headersSent) res.status(404).end();
+  });
+});
+
 // Site icons for the Home screen and the Mac app's sidebar. The server fetches them (so your Mac
 // never contacts the site just to draw an icon) and keeps them for a day.
 const iconCache = new Map();
@@ -193,6 +291,10 @@ app.use((_req, res) => {
 });
 
 app.use((err, _req, res, _next) => {
+  // Too-big uploads and bad requests get a clear answer instead of a crash report.
+  const status = Number(err.status || err.statusCode) || 500;
+  if (status === 413) return res.status(413).json({ error: "That file is too big." });
+  if (status >= 400 && status < 500) return res.status(status).json({ error: "Bad request." });
   console.error(err.stack);
   res.status(500).type("text/plain").send("Internal server error");
 });
@@ -231,6 +333,16 @@ for (const signal of ["SIGTERM", "SIGINT"]) {
     process.exit(0);
   });
 }
+
+// Slow or stuck requests are dropped instead of tying up the server.
+server.headersTimeout = 30_000;
+server.requestTimeout = 120_000;
+server.keepAliveTimeout = 65_000;
+server.maxHeadersCount = 200;
+
+// One bad request should never take the whole server down: log it and keep going.
+process.on("uncaughtException", error => console.error("Unexpected error (server kept running):", error));
+process.on("unhandledRejection", error => console.error("Unhandled promise (server kept running):", error));
 
 server.listen({ port: PORT }, () => {
   console.log(chalk.green(`🌍 ${config.name} is running on http://localhost:${PORT}`));

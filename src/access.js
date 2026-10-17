@@ -216,18 +216,22 @@ export function createAccess({ requireSignIn = true, inviteOnly = false, barkSit
     return readSession(bearer) || readSession(parseCookies(req.headers.cookie)[COOKIE]);
   }
 
+  /** Where someone's saved profile data lives: their email, or the guest identity. */
+  const keyFor = identity => (identity?.startsWith("guest:") ? identity : identity?.startsWith("google:") ? identity.slice(7) : null);
+  const avatarUrl = key => (known[key]?.avatar ? `/chat/avatars/${known[key].avatar}` : null);
+
   function profileFor(identity) {
     if (identity?.startsWith("guest:")) {
       const id = `u${sha256hex(identity).slice(0, 16)}`;
       const name = known[identity]?.name;
-      return { id, name: name || `Guest ${id.slice(1, 5)}`, named: Boolean(name) };
+      return { id, name: name || `Guest ${id.slice(1, 5)}`, named: Boolean(name), avatar: avatarUrl(identity) };
     }
     if (!identity?.startsWith("google:")) return null;
     const email = identity.slice(7);
     // A name the person picked themselves wins, then the invite list's, then their Google name.
     const custom = known[email]?.displayName;
     const name = custom || invites?.people.get(email) || invites?.hashed.get(hashEmail(email)) || known[email]?.name || email.split("@")[0];
-    return { id: `g${sha256hex(email).slice(0, 16)}`, name, custom: Boolean(custom), googleName: known[email]?.name || "" };
+    return { id: `g${sha256hex(email).slice(0, 16)}`, name, custom: Boolean(custom), googleName: known[email]?.name || "", avatar: avatarUrl(email) };
   }
 
   function members() {
@@ -393,6 +397,17 @@ h1{font-size:26px;letter-spacing:-.03em;margin:0 0 10px}p{color:#a9a9b2;max-widt
     return true;
   }
 
+  /** Sets (or with null, removes) someone's profile picture file. Returns the old file name. */
+  function setAvatar(identity, file) {
+    const key = keyFor(identity);
+    if (!key) return null;
+    const old = known[key]?.avatar ?? null;
+    const { avatar, ...rest } = known[key] ?? {};
+    known[key] = file ? { ...rest, avatar: file } : rest;
+    persist();
+    return old;
+  }
+
   function touch(identity) {
     const key = identity?.startsWith("guest:") ? identity : identity?.startsWith("google:") ? identity.slice(7) : null;
     if (!key) return;
@@ -435,6 +450,7 @@ h1{font-size:26px;letter-spacing:-.03em;margin:0 0 10px}p{color:#a9a9b2;max-widt
     identify,
     tunnelKey,
     readTunnelKey,
+    setAvatar,
     profileFor,
     members,
     stillValid,

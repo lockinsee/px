@@ -14,6 +14,11 @@ const KEEP_PER_CONVERSATION = 2000;
 const RECENT_ON_CONNECT = 50;
 const HISTORY_PAGE = 50;
 const MAX_CALL_SIZE = 8;
+// Flood protection: each connection gets a budget of messages that refills over time.
+// Normal use never comes close; a script hammering the server just gets ignored, then cut off.
+const BUDGET = { size: 60, perSecond: 15 };          // chat actions (send, typing, history…)
+const SIGNAL_BUDGET = { size: 400, perSecond: 120 }; // call set-up (lots of tiny messages at once)
+const MAX_SOCKETS_PER_PERSON = 12;
 
 const newId = () => randomBytes(9).toString("base64url");
 
@@ -210,8 +215,15 @@ export function createChat({ access, channels, iceServers, dataDir, log = consol
           .replace(/\r\n/g, "\n")
           .trim()
           .slice(0, MAX_TEXT);
-        if (!text) return;
+        // A photo uploaded through /chat/upload (only its server address is accepted).
+        const image = typeof msg.image === "string" && /^\/chat\/files\/[a-f0-9]{32}\.(jpg|png|gif|webp)$/.test(msg.image) ? msg.image : null;
+        if (!text && !image) return;
         const message = { id: newId(), from: me.id, text, at: now };
+        if (image) {
+          message.image = image;
+          const w = Number(msg.w), h = Number(msg.h);
+          if (w > 0 && h > 0 && w <= 10000 && h <= 10000) Object.assign(message, { w: Math.round(w), h: Math.round(h) });
+        }
         store.add(conv, message);
         broadcast(conv, { t: "msg", conv, msg: message, nonce: msg.nonce ?? null });
         return;
@@ -285,10 +297,28 @@ export function createChat({ access, channels, iceServers, dataDir, log = consol
     }
   }
 
+  function makeBucket({ size, perSecond }) {
+    let tokens = size;
+    let last = Date.now();
+    return () => {
+      const now = Date.now();
+      tokens = Math.min(size, tokens + ((now - last) / 1000) * perSecond);
+      last = now;
+      if (tokens < 1) return false;
+      tokens -= 1;
+      return true;
+    };
+  }
+
   function connect(ws, identity) {
+    // One person can't open an endless number of connections.
+    if ([...clients].filter(c => c.identity === identity).length >= MAX_SOCKETS_PER_PERSON) {
+      ws.close(4009, "too many connections");
+      return;
+    }
     access.touch?.(identity);
     const me = access.profileFor(identity);
-    const client = { ws, identity, me };
+    const client = { ws, identity, me, budget: makeBucket(BUDGET), signalBudget: makeBucket(SIGNAL_BUDGET), dropped: 0 };
     const wasOnline = onlineIds().has(me.id);
     clients.add(client);
 
@@ -310,7 +340,18 @@ export function createChat({ access, channels, iceServers, dataDir, log = consol
       } catch {
         return;
       }
-      if (msg && typeof msg === "object") handle(client, msg);
+      if (!msg || typeof msg !== "object") return;
+      const allowed = msg.t === "signal" ? client.signalBudget() : client.budget();
+      if (!allowed) {
+        // Way over the limit: this isn't a person typing, so disconnect.
+        if (++client.dropped > 300) ws.close(4008, "slow down");
+        return;
+      }
+      try {
+        handle(client, msg);
+      } catch (error) {
+        warn(`Ignored a bad message: ${error.message}`);
+      }
     });
 
     ws.on("close", () => {
@@ -341,5 +382,16 @@ export function createChat({ access, channels, iceServers, dataDir, log = consol
   }
 
   log(`Messages ready: channels ${channelList.map(c => `#${c.name}`).join(", ")}; history in ${path.resolve(dataDir)}`);
-  return { handleUpgrade, dmId, flush: store.flush };
+  /** Someone changed their profile (e.g. picture): update them everywhere. */
+  function refreshProfile(identity) {
+    const updated = access.profileFor(identity);
+    for (const c of clients) {
+      if (c.identity !== identity) continue;
+      c.me = updated;
+      send(c, { t: "me", me: updated });
+    }
+    broadcastMembers();
+  }
+
+  return { handleUpgrade, dmId, flush: store.flush, refreshProfile };
 }

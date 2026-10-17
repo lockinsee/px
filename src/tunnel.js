@@ -14,6 +14,9 @@ const ALLOWED_PORTS = new Set([80, 443]);
 const HEADER_LIMIT = 16 * 1024;
 const HANDSHAKE_MS = 15_000;
 const IDLE_MS = 10 * 60_000;
+// Caps so one person (or a runaway page) can't exhaust the server's connections.
+const MAX_PER_PERSON = 300;
+const MAX_TOTAL = 4000;
 
 function isPrivateAddress(ip) {
   if (net.isIPv4(ip)) {
@@ -38,6 +41,7 @@ function reply(socket, status, extra = "") {
 
 export function startTunnel({ port, readKey, allowPrivate = false, log = console.log }) {
   let open = 0;
+  const perPerson = new Map();
 
   const server = net.createServer(client => {
     client.setNoDelay(true);
@@ -73,6 +77,7 @@ export function startTunnel({ port, readKey, allowPrivate = false, log = console
     const password = basic ? Buffer.from(basic, "base64").toString("utf8").split(":").slice(1).join(":") : "";
     const identity = password ? readKey(password) : null;
     if (!identity) return reply(client, "407 Proxy Authentication Required", 'Proxy-Authenticate: Basic realm="bark"\r\n');
+    if (open >= MAX_TOTAL || (perPerson.get(identity) ?? 0) >= MAX_PER_PERSON) return reply(client, "503 Service Unavailable", "Retry-After: 5\r\n");
 
     const match = /^\[?([^\]]+?)\]?:(\d+)$/.exec(target ?? "");
     const host = match?.[1]?.toLowerCase();
@@ -106,6 +111,7 @@ export function startTunnel({ port, readKey, allowPrivate = false, log = console
       client.write("HTTP/1.1 200 Connection Established\r\n\r\n");
       if (rest.length) upstream.write(rest);
       open++;
+      perPerson.set(identity, (perPerson.get(identity) ?? 0) + 1);
       client.pipe(upstream);
       upstream.pipe(client);
       client.resume();
@@ -116,6 +122,9 @@ export function startTunnel({ port, readKey, allowPrivate = false, log = console
       client.once("close", done);
       upstream.once("close", () => {
         open = Math.max(0, open - 1);
+        const left = (perPerson.get(identity) ?? 1) - 1;
+        if (left > 0) perPerson.set(identity, left);
+        else perPerson.delete(identity);
         done();
       });
       upstream.on("error", done);
